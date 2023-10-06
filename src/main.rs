@@ -17,14 +17,16 @@ pub enum Error {
     JsonError(#[from] serde_json::Error),
 }
 
-async fn handle_request(req_body: &str) -> Result<Vec<biblizap_rs::Article>, Error> {
+async fn handle_request(req_body: &str) -> Result<String, Error> {
     let parameters = serde_json::from_str::<RequestParameters>(req_body)?;
 
     let lens_api_key = "TdUUUOLUWn9HpA7zkZnu01NDYO1gVdVz71cDjFRQPeVDCrYGKWoY";
 
     let snowball = biblizap_rs::snowball(&parameters.input_id_list, parameters.depth, parameters.output_max_size, lens_api_key).await?;
 
-    Ok(snowball)
+    let json_str = serde_json::to_string(&snowball)?;
+
+    Ok(json_str)
 }
 
 #[post("/api")]
