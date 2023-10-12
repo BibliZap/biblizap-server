@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 actix-web = "4.4.0"
-biblizap-rs = { version = "0.1.1", path = "../biblizap-rs" }
+biblizap-rs = { git = "https://github.com/BibliZap/biblizap-rs", version = "0.2.0" }
 reqwest = "0.11.20"
 serde = { version = "1.0.188", features = ["derive"] }
 serde_json = "1.0.107"
