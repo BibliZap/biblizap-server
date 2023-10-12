@@ -1,12 +1,14 @@
 use actix_web::{post, App, HttpResponse, HttpServer, Responder};
+use biblizap_rs::SearchFor;
 use serde::Deserialize;
 use thiserror::Error;
 
 #[derive(Debug, Deserialize)]
-struct RequestParameters {
+struct SnowballParameters {
     output_max_size: usize,
     depth: u8,
-    input_id_list: Vec<String>
+    input_id_list: Vec<String>,
+    search_for: SearchFor
 }
 
 #[derive(Error, Debug)]
@@ -18,11 +20,12 @@ pub enum Error {
 }
 
 async fn handle_request(req_body: &str) -> Result<String, Error> {
-    let parameters = serde_json::from_str::<RequestParameters>(req_body)?;
+    let parameters = serde_json::from_str::<SnowballParameters>(req_body)?;
+    println!("{parameters:#?}");
 
     let lens_api_key = "TdUUUOLUWn9HpA7zkZnu01NDYO1gVdVz71cDjFRQPeVDCrYGKWoY";
 
-    let snowball = biblizap_rs::snowball(&parameters.input_id_list, parameters.depth, parameters.output_max_size, &biblizap_rs::SearchFor::Both, lens_api_key).await?;
+    let snowball = biblizap_rs::snowball(&parameters.input_id_list, parameters.depth, parameters.output_max_size, &parameters.search_for, lens_api_key).await?;
 
     let json_str = serde_json::to_string(&snowball)?;
 
