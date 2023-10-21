@@ -50,7 +50,7 @@ async fn main() -> std::io::Result<()> {
     HttpServer::new(|| {
         App::new()
             .service(api)
-            .service(actix_files::Files::new("/","./biblizap-frontend/dist").show_files_listing())
+            .service(actix_files::Files::new("/","./biblizap-frontend/dist").index_file("index.html"))
     })
     .bind(("127.0.0.1", 8080))?
     .run()
