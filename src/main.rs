@@ -41,10 +41,9 @@ async fn api(req_body: String) -> impl Responder {
             HttpResponse::Ok().body(snowball)
         }
         Err(error) => {
-            HttpResponse::InternalServerError().body(error.to_string())
+            HttpResponse::InternalServerError().body(format!("{:#?}", error))
         }
     }
-    
 }
 
 #[actix_web::main]

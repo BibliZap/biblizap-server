@@ -1,0 +1,3 @@
+[submodule "biblizap-frontend"]
+	path = biblizap-frontend
+	url = https://github.com/BibliZap/biblizap-frontend
