@@ -21,7 +21,6 @@ pub enum Error {
 
 async fn handle_request(req_body: &str) -> Result<String, Error> {
     let parameters = serde_json::from_str::<SnowballParameters>(req_body)?;
-    println!("{parameters:#?}");
 
     let lens_api_key = "TdUUUOLUWn9HpA7zkZnu01NDYO1gVdVz71cDjFRQPeVDCrYGKWoY";
 
@@ -51,6 +50,7 @@ async fn main() -> std::io::Result<()> {
     HttpServer::new(|| {
         App::new()
             .service(api)
+            .service(actix_files::Files::new("/","./biblizap-frontend/dist").show_files_listing())
     })
     .bind(("127.0.0.1", 8080))?
     .run()
