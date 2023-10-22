@@ -404,7 +404,7 @@ checksum = "9ba43ea6f343b788c8764558649e08df62f86c6ef251fdaeb1ffd010a9ae50a2"
 [[package]]
 name = "biblizap-rs"
 version = "0.2.0"
-source = "git+https://github.com/BibliZap/biblizap-rs#40f6a32c853db6a5cae96d03af84ec2f95e8b080"
+source = "git+https://github.com/BibliZap/biblizap-rs#617f7ff76147bad3c7170a43dad596ec18cb111b"
 dependencies = [
  "anyhow",
  "async-std",
