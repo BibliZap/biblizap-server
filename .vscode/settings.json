@@ -1,0 +1,5 @@
+{
+    "rust-analyzer.linkedProjects": [
+        "./biblizap-frontend/Cargo.toml"
+    ]
+}
