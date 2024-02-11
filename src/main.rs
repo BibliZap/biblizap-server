@@ -3,6 +3,8 @@ use biblizap_rs::SearchFor;
 use serde::Deserialize;
 use thiserror::Error;
 
+include!(concat!(env!("OUT_DIR"), "/generated.rs"));
+
 #[derive(Debug, Deserialize)]
 struct SnowballParameters {
     output_max_size: usize,
@@ -48,9 +50,11 @@ async fn api(req_body: String) -> impl Responder {
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     HttpServer::new(|| {
+        let generated = generate();
+
         App::new()
             .service(api)
-            .service(actix_files::Files::new("/","./biblizap-frontend/dist").index_file("index.html"))
+            .service(actix_web_static_files::ResourceFiles::new("/", generated))
     })
     .bind(("127.0.0.1", 8080))?
     .run()
