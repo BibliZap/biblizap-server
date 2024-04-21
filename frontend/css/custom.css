@@ -1,0 +1,14 @@
+.main-title {
+    font-family: Garamond, Georgia, serif !important;
+    font-size: 8vw
+}
+
+#logo {
+    max-width: 50%;
+    height: auto;
+    margin-right: 1vw;
+}
+
+#navbar-title {
+    font-family: Garamond, Georgia, serif !important;
+}
