@@ -2,10 +2,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::table::Filters;
 
-fn unwrap_int(year: &Option<i32>) -> Option<String> {
-    Some(format!("{}", (*year)?))
-}
-
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct Article {
     pub first_author: Option<String>,
@@ -20,23 +16,24 @@ pub struct Article {
 
 impl Article {
     pub fn matches_global(&self, pattern: &str) -> bool {
-        self.doi.as_ref().map_or(false, |x| x.contains(pattern)) |
-        self.title.as_ref().map_or(false, |x| x.contains(pattern)) |
-        self.journal.as_ref().map_or(false, |x| x.contains(pattern)) |
-        self.summary.as_ref().map_or(false, |x| x.contains(pattern)) |
-        self.first_author.as_ref().map_or(false, |x| x.contains(pattern)) |
-        self.year_published.map_or(false, |x| x.to_string().contains(pattern)) |
-        self.score.map_or(false, |x| x.to_string().contains(pattern)) |
-        self.citations.map_or(false, |x| x.to_string().contains(pattern))       
+        let pattern_lowercase = pattern.to_lowercase();
+        self.doi.as_ref().map_or(false, |x| x.to_lowercase().contains(&pattern_lowercase)) |
+        self.title.as_ref().map_or(false, |x| x.to_lowercase().contains(&pattern_lowercase)) |
+        self.journal.as_ref().map_or(false, |x| x.to_lowercase().contains(&pattern_lowercase)) |
+        self.summary.as_ref().map_or(false, |x| x.to_lowercase().contains(&pattern_lowercase)) |
+        self.first_author.as_ref().map_or(false, |x| x.to_lowercase().contains(&pattern_lowercase)) |
+        self.year_published.map_or(false, |x| x.to_string().contains(&pattern_lowercase)) |
+        self.score.map_or(false, |x| x.to_string().contains(&pattern_lowercase)) |
+        self.citations.map_or(false, |x| x.to_string().contains(&pattern_lowercase))       
     }
 
 
     pub fn matches(&self, filters: &Filters) -> bool {
-        self.doi.as_ref().map_or(false, |x| x.contains(&filters.doi)) &
-        self.title.as_ref().map_or(false, |x| x.contains(&filters.title)) &
-        self.journal.as_ref().map_or(false, |x| x.contains(&filters.journal)) &
-        self.summary.as_ref().map_or(false, |x| x.contains(&filters.summary)) &
-        self.first_author.as_ref().map_or(false, |x| x.contains(&filters.first_author)) &
+        self.doi.as_ref().map_or(false, |x| x.to_lowercase().contains(&filters.doi.to_lowercase())) &
+        self.title.as_ref().map_or(false, |x| x.to_lowercase().contains(&filters.title.to_lowercase())) &
+        self.journal.as_ref().map_or(false, |x| x.to_lowercase().contains(&filters.journal.to_lowercase())) &
+        self.summary.as_ref().map_or(false, |x| x.to_lowercase().contains(&filters.summary.to_lowercase())) &
+        self.first_author.as_ref().map_or(false, |x| x.to_lowercase().contains(&filters.first_author.to_lowercase())) &
         self.year_published.map_or(false, |x| x.to_string().contains(&filters.year_published)) &
         self.score.map_or(false, |x| x.to_string().contains(&filters.score)) &
         self.citations.map_or(false, |x| x.to_string().contains(&filters.citations))
