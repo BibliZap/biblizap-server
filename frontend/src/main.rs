@@ -47,34 +47,34 @@ fn app() -> Html {
 
 #[function_component(BibliZapApp)]
 fn app() -> Html {
-    let table_status = use_state(|| TableStatus::NotRequested);
+    let results_status = use_state(|| ResultsStatus::NotRequested);
     let on_receiving_response = { 
-        let table_status = table_status.clone();
+        let results_status = results_status.clone();
         Callback::from(move |table: Result<Rc<RefCell<Vec<Article>>>, Error>| {
             match table {
-                Ok(table) => table_status.set(TableStatus::Available(table)),
-                Err(error) => table_status.set(TableStatus::RequestError(error.to_string())),
+                Ok(table) => results_status.set(ResultsStatus::Available(table)),
+                Err(error) => results_status.set(ResultsStatus::RequestError(error.to_string())),
             };
         })
     };
     let on_requesting_table = {
-        let table_status = table_status.clone();
+        let results_status = results_status.clone();
         Callback::from(move |_: ()| {
-            table_status.set(TableStatus::Requested);
+            results_status.set(ResultsStatus::Requested);
         })
     };
 
     let on_submit_error= {
-        let table_status = table_status.clone();
+        let results_status = results_status.clone();
         Callback::from(move |error: common::Error| {
-            table_status.set(TableStatus::RequestError(error.to_string()))
+            results_status.set(ResultsStatus::RequestError(error.to_string()))
         })
     };
 
     html! {
         <div>
             <SnowballForm {on_submit_error} {on_requesting_table} {on_receiving_response}/>
-            <TableContainer table_status={table_status.clone()}/>
+            <ResultsContainer results_status={results_status.clone()}/>
         </div>
     }
 }

@@ -17,7 +17,7 @@ mod download;
 use download::*;
 
 #[derive(Clone, PartialEq)]
-pub enum TableStatus {
+pub enum ResultsStatus {
     NotRequested,
     Requested,
     RequestError(String),
@@ -25,16 +25,16 @@ pub enum TableStatus {
 }
 
 #[derive(Clone, PartialEq, Properties)]
-pub struct TableContainerProps {
-    pub table_status: UseStateHandle<TableStatus>,
+pub struct ResultsContainerProps {
+    pub results_status: UseStateHandle<ResultsStatus>,
 }
-#[function_component(TableContainer)]
-pub fn table_container(props: &TableContainerProps) -> Html  {
-    let content = match props.table_status.deref() {
-        TableStatus::NotRequested => { html! { } }
-        TableStatus::Available(articles) => { html! {<Table articles={articles}/>} }
-        TableStatus::Requested => { html! {<Spinner/>} }
-        TableStatus::RequestError(msg) =>  { html! {<Error msg={msg.to_owned()}/>} }
+#[function_component(ResultsContainer)]
+pub fn table_container(props: &ResultsContainerProps) -> Html  {
+    let content = match props.results_status.deref() {
+        ResultsStatus::NotRequested => { html! { } }
+        ResultsStatus::Available(articles) => { html! {<Results articles={articles}/>} }
+        ResultsStatus::Requested => { html! {<Spinner/>} }
+        ResultsStatus::RequestError(msg) =>  { html! {<Error msg={msg.to_owned()}/>} }
     };
 
     content
@@ -58,8 +58,8 @@ pub struct TableProps {
     articles: Rc<RefCell<Vec<Article>>>,
 }
 
-#[function_component(Table)]
-pub fn table(props: &TableProps) -> Html {
+#[function_component(Results)]
+pub fn results(props: &TableProps) -> Html {
     let selected_articles = use_mut_ref(Vec::<String>::new);
     let selected_articles = use_state(|| selected_articles);
 
