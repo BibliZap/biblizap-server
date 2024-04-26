@@ -12,7 +12,7 @@ use crate::common::*;
 #[derive(Clone, PartialEq, Properties)]
 pub struct FormProps {
     pub on_submit_error: Callback<common::Error>,
-    pub on_requesting_table: Callback<()>,
+    pub on_requesting_results: Callback<()>,
     pub on_receiving_response: Callback<Result<Rc<RefCell<Vec<Article>>>, Error>>,
 }
 
@@ -134,11 +134,11 @@ pub fn SnowballForm(props: &FormProps) -> Html {
         let search_for_node = search_for_node.clone();
         let on_submit_error = props.on_submit_error.clone();
         let on_receiving_response = props.on_receiving_response.clone();
-        let on_requesting_table = props.on_requesting_table.clone();
+        let on_requesting_results = props.on_requesting_results.clone();
         
         Callback::from(move |event: SubmitEvent| {
             event.prevent_default();
-            on_requesting_table.emit(());
+            on_requesting_results.emit(());
             
             let form_content = SnowballParameters::new(id_list_node.clone(),
                     depth_node.clone(),

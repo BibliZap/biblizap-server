@@ -57,7 +57,7 @@ fn app() -> Html {
             };
         })
     };
-    let on_requesting_table = {
+    let on_requesting_results = {
         let results_status = results_status.clone();
         Callback::from(move |_: ()| {
             results_status.set(ResultsStatus::Requested);
@@ -73,7 +73,7 @@ fn app() -> Html {
 
     html! {
         <div>
-            <SnowballForm {on_submit_error} {on_requesting_table} {on_receiving_response}/>
+            <SnowballForm {on_submit_error} {on_requesting_results} {on_receiving_response}/>
             <ResultsContainer results_status={results_status.clone()}/>
         </div>
     }
