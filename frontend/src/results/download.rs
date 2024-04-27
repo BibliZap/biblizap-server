@@ -3,7 +3,7 @@ use wasm_bindgen::prelude::*;
 use yew::prelude::*;
 
 use crate::common;
-use crate::table::Article;
+use crate::results::Article;
 
 #[allow(dead_code)]
 pub fn to_csv(articles: &[Article]) -> Result<Vec<u8>, common::Error> {

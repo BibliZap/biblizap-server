@@ -6,8 +6,8 @@ use yew::prelude::*;
 mod legal;
 use legal::*;
 
-mod table;
-use table::*;
+mod results;
+use results::*;
 
 mod navbar;
 use navbar::*;

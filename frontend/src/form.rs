@@ -6,7 +6,7 @@ use yew::prelude::*;
 
 use crate::common::{self, SearchFor, get_value};
 
-use crate::table::article::Article;
+use crate::results::article::Article;
 use crate::common::*;
 
 #[derive(Clone, PartialEq, Properties)]

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::table::Filters;
+use crate::results::Filters;
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct Article {
