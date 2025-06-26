@@ -5,6 +5,7 @@ use yew::prelude::*;
 use crate::common;
 use crate::results::Article;
 
+/// Converts a slice of `Article` structs into a CSV byte vector.
 #[allow(dead_code)]
 pub fn to_csv(articles: &[Article]) -> Result<Vec<u8>, common::Error> {
     let mut wtr = csv::Writer::from_writer(Vec::new());
@@ -21,6 +22,7 @@ pub fn to_csv(articles: &[Article]) -> Result<Vec<u8>, common::Error> {
     }
 }
 
+/// Converts a slice of `Article` structs into an Excel (XLSX) byte vector.
 pub fn to_excel(articles: &[Article]) -> Result<Vec<u8>, common::Error> {
     use rust_xlsxwriter::Workbook;
 
@@ -70,6 +72,7 @@ pub fn to_excel(articles: &[Article]) -> Result<Vec<u8>, common::Error> {
     Ok(buf)
 }
 
+/// Triggers a file download in the browser using a byte slice and filename.
 pub fn download_bytes_as_file(bytes: &[u8], filename: &str) -> Result<(), common::Error> {
     use gloo_utils::document;
     let file_blob= gloo_file::Blob::new(bytes);
@@ -88,11 +91,13 @@ pub fn download_bytes_as_file(bytes: &[u8], filename: &str) -> Result<(), common
 }
 
 
+/// Properties for the DownloadButton component.
 #[derive(Clone, PartialEq, Properties)]
 pub struct ButtonProps {
     pub onclick: Callback<MouseEvent>
 }
 
+/// Component for the download button.
 #[function_component(DownloadButton)]
 pub fn download_button(props: &ButtonProps) -> Html {
     html! {

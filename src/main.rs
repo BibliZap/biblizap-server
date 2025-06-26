@@ -3,12 +3,15 @@ use biblizap_rs::SearchFor;
 use serde::Deserialize;
 use thiserror::Error;
 
+// Includes the generated code for static files (frontend build).
 include!(concat!(env!("OUT_DIR"), "/generated.rs"));
 
+/// Application configuration holding necessary secrets/settings.
 struct AppConfig {
     lens_api_key: String
 }
 
+/// Parameters received from the frontend for the snowball search.
 #[derive(Debug, Deserialize)]
 struct SnowballParameters {
     output_max_size: usize,
@@ -17,6 +20,7 @@ struct SnowballParameters {
     search_for: SearchFor
 }
 
+/// Custom error type for the server.
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("snowball error")]
@@ -25,6 +29,9 @@ pub enum Error {
     JsonError(#[from] serde_json::Error),
 }
 
+/// Handles the core logic of performing the snowball search using biblizap-rs.
+/// Takes the request body (JSON string) and the Lens API key.
+/// Returns a JSON string representing the search results or an error.
 async fn handle_request(req_body: &str, lens_api_key: &str) -> Result<String, Error> {
     let parameters = serde_json::from_str::<SnowballParameters>(req_body)?;
 
@@ -35,6 +42,9 @@ async fn handle_request(req_body: &str, lens_api_key: &str) -> Result<String, Er
     Ok(json_str)
 }
 
+/// Actix-web handler for the `/api` endpoint.
+/// Receives the request body, extracts parameters, performs the snowball search,
+/// and returns the results as JSON or an error response.
 async fn api(req_body: String, _: HttpRequest, config: web::Data<AppConfig>) -> impl Responder {
     let snowball = handle_request(&req_body, &config.lens_api_key).await;
     
@@ -48,6 +58,9 @@ async fn api(req_body: String, _: HttpRequest, config: web::Data<AppConfig>) -> 
     }
 }
 
+/// Main function to start the Actix-web server.
+/// Parses command-line arguments for the API key and port,
+/// loads the frontend static files, and serves the application.
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let args = Args::parse();

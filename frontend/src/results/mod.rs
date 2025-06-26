@@ -16,6 +16,7 @@ use footer::TableFooter;
 mod download;
 use download::*;
 
+/// Enum representing the status of the search results.
 #[derive(Clone, PartialEq)]
 pub enum ResultsStatus {
     NotRequested,
@@ -24,10 +25,13 @@ pub enum ResultsStatus {
     Available(Rc<RefCell<Vec<Article>>>)
 }
 
+/// Properties for the ResultsContainer component.
 #[derive(Clone, PartialEq, Properties)]
 pub struct ResultsContainerProps {
     pub results_status: UseStateHandle<ResultsStatus>,
 }
+/// Container component for displaying search results.
+/// Renders a spinner, error message, or the results table based on the `results_status`.
 #[function_component(ResultsContainer)]
 pub fn table_container(props: &ResultsContainerProps) -> Html  {
     let content = match props.results_status.deref() {
@@ -40,6 +44,7 @@ pub fn table_container(props: &ResultsContainerProps) -> Html  {
     content
 }
 
+/// Component for displaying a loading spinner.
 #[function_component(Spinner)]
 pub fn spinner() -> Html {
     html! {
@@ -53,11 +58,14 @@ pub fn spinner() -> Html {
     }
 }
 
+/// Properties for the Results (Table) component.
 #[derive(Clone, PartialEq, Properties)]
 pub struct TableProps {
     articles: Rc<RefCell<Vec<Article>>>,
 }
 
+/// Component for displaying the search results in a table.
+/// Includes global search, column sorting, column filtering, pagination, and download options.
 #[function_component(Results)]
 pub fn results(props: &TableProps) -> Html {
     let selected_articles = use_mut_ref(Vec::<String>::new);
@@ -159,6 +167,7 @@ pub fn results(props: &TableProps) -> Html {
 }
 
 
+/// Properties for table header cells that support sorting.
 #[derive(Clone, PartialEq, Properties)]
 struct HeaderCellProps {
     articles: Rc<RefCell<Vec<Article>>>,
@@ -166,6 +175,7 @@ struct HeaderCellProps {
     style: AttrValue,
 }
 
+/// Properties for table header cells that support filtering.
 #[derive(Clone, PartialEq, Properties)]
 struct HeaderCellSearchProps {
     filters: UseStateHandle<Rc<RefCell<Filters>>>,
@@ -173,9 +183,11 @@ struct HeaderCellSearchProps {
 }
 
 use paste::paste;
+/// Macro to generate header cell components for sorting and filtering.
 macro_rules! header_cell {
     ($field:ident) => {
         paste! {
+            /// Table header cell for the '[<$field:snake>]' field, supporting sorting.
             #[function_component]
             fn [<HeaderCell $field:camel>](props: &HeaderCellProps) -> Html {
                 let sort_reverse = {
@@ -207,6 +219,7 @@ macro_rules! header_cell {
                 }
             }
 
+            /// Table header cell for the '[<$field:snake>]' field, supporting filtering.
             #[function_component]
             fn [<HeaderCellSearch $field:camel>](props: &HeaderCellSearchProps) -> Html {
                 let input_node_ref = use_node_ref();
@@ -239,11 +252,13 @@ header_cell!(first_author);
 header_cell!(year_published);
 header_cell!(score);
 
+/// Properties for the TableGlobalSearch component.
 #[derive(Clone, PartialEq, Properties)]
 pub struct TableGlobalSearchProps {
     filter: UseStateHandle<String>,
 }
 
+/// Component for the global search input above the table.
 #[function_component(TableGlobalSearch)]
 fn table_global_filter(props: &TableGlobalSearchProps) -> Html {
     let input_node_ref = use_node_ref();
@@ -266,11 +281,14 @@ fn table_global_filter(props: &TableGlobalSearchProps) -> Html {
     }
 }
 
+/// Properties for a table row component.
 #[derive(Clone, PartialEq, Properties)]
 pub struct RowProps {
     article: Article,
     update_selected: Callback<(String, bool)>
 }
+/// Component for a single row in the results table.
+/// Displays article information and a checkbox for selection.
 #[function_component(Row)]
 pub fn row(props: &RowProps) -> Html {
     fn doi_link(doi: Option<String>) -> Option<String> {
@@ -304,11 +322,13 @@ pub fn row(props: &RowProps) -> Html {
     }
 }
 
+/// Properties for the Error component.
 #[derive(Clone, PartialEq, Properties)]
 pub struct ErrorProps {
     msg: AttrValue
 }
 
+/// Component for displaying an error message.
 #[function_component(Error)]
 pub fn error(props: &ErrorProps) -> Html {
     html! {

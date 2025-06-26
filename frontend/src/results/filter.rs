@@ -1,3 +1,4 @@
+/// Struct holding the filter values for each column in the results table.
 #[derive(Default, PartialEq, Debug)]
 pub struct Filters {
     pub first_author: String,

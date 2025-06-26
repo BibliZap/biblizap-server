@@ -1,5 +1,6 @@
 use yew::prelude::*;
 
+/// Component for the main title and logo section ("the wall").
 #[function_component]
 pub fn Wall() -> Html {
     html! { 

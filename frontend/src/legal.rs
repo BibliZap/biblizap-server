@@ -1,6 +1,7 @@
 use rand::seq::SliceRandom;
 use yew::prelude::*;
 
+/// Component for displaying legal information, including disclaimer, privacy policy, etc.
 #[function_component(LegalInformation)]
 pub fn legal_information() -> Html {
     let mut rng = rand::thread_rng();
@@ -49,6 +50,7 @@ pub fn legal_information() -> Html {
     }
 }
 
+/// Component for explaining how BibliZap works, its principles, and data sources.
 #[function_component(HowItWorks)]
 pub fn how_it_works() -> Html {
     html! {
@@ -105,7 +107,7 @@ pub fn how_it_works() -> Html {
     }
 }
 
-
+/// Component for displaying contact information.
 #[function_component(Contact)]
 pub fn contact() -> Html {
     html! {

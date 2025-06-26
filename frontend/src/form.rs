@@ -9,14 +9,19 @@ use crate::common::{self, SearchFor, get_value};
 use crate::results::article::Article;
 use crate::common::*;
 
+/// Properties for the SnowballForm component.
 #[derive(Clone, PartialEq, Properties)]
 pub struct FormProps {
+    /// Callback for when a submission error occurs.
     pub on_submit_error: Callback<common::Error>,
+    /// Callback for when the search request is initiated.
     pub on_requesting_results: Callback<()>,
+    /// Callback for when the search response is received.
     pub on_receiving_response: Callback<Result<Rc<RefCell<Vec<Article>>>, Error>>,
 }
 
-#[derive(Clone, PartialEq, Properties, Debug, Default, Serialize)]
+/// Struct representing the parameters for the snowball search API request.
+#[derive(Clone, PartialEq, Debug, Default, Serialize)]
 struct SnowballParameters {
     output_max_size: usize,
     depth: u8,
@@ -25,6 +30,7 @@ struct SnowballParameters {
 }
 
 impl SnowballParameters {
+    /// Creates new `SnowballParameters` from form input node references.
     fn new(id_list_node: NodeRef,
             depth_node: NodeRef,
             output_max_size_node: NodeRef,
@@ -61,6 +67,9 @@ impl SnowballParameters {
     }
 }
 
+/// Sends the snowball search request to the backend API.
+/// Takes the form content as `SnowballParameters`.
+/// Returns a `Result` containing a shared reference to a vector of `Article` or an `Error`.
 async fn get_response(form_content: &SnowballParameters) -> Result<Rc<RefCell<Vec<Article>>>, Error> {
     use gloo_utils::document;
     let url = document().document_uri();
@@ -90,6 +99,8 @@ async fn get_response(form_content: &SnowballParameters) -> Result<Rc<RefCell<Ve
     Ok(Rc::new(RefCell::new(articles)))
 }
 
+/// Checks the URL query parameters for a prefill `id_list_prefill`.
+/// Returns the prefill string if found, otherwise `None`.
 fn id_list_prefill() -> Option<String> {
     let url = gloo_utils::document().document_uri();
     let url = match url {
@@ -107,6 +118,9 @@ fn id_list_prefill() -> Option<String> {
     Some(id_list_prefill)
 }
 
+/// Component for the snowball search form.
+/// Allows users to input IDs, select depth, max results, and search direction.
+/// Handles form submission and triggers API requests.
 #[function_component]
 pub fn SnowballForm(props: &FormProps) -> Html {
     let id_list_node = use_node_ref();

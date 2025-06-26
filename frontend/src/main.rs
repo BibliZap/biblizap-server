@@ -21,6 +21,8 @@ use form::SnowballForm;
 mod common;
 use common::{Error, CurrentPage};
 
+/// The main application component.
+/// Manages the current page state and dark mode state.
 #[function_component(App)]
 fn app() -> Html {
     let current_page = use_state(|| CurrentPage::BibliZapApp);
@@ -45,6 +47,9 @@ fn app() -> Html {
     }
 }   
 
+/// The main BibliZap application page component.
+/// Contains the search form and the results container.
+/// Manages the state of the search results.
 #[function_component(BibliZapApp)]
 fn app() -> Html {
     let results_status = use_state(|| ResultsStatus::NotRequested);
@@ -79,6 +84,7 @@ fn app() -> Html {
     }
 }
 
+/// Entry point for the Yew frontend application.
 fn main() {
     yew::Renderer::<App>::new().render();
 }

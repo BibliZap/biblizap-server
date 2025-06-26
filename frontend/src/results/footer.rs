@@ -4,6 +4,7 @@ use wasm_bindgen::JsCast;
 use yew::prelude::*;
 use web_sys::HtmlElement;
 
+/// Properties for the TableFooter component.
 #[derive(Clone, PartialEq, Properties)]
 pub struct TableFooterProps {
     pub article_total_number: usize,
@@ -11,6 +12,7 @@ pub struct TableFooterProps {
     pub table_current_page: UseStateHandle<i32>
 }
 
+/// Component for the table footer, including pagination and articles per page dropdown.
 #[function_component(TableFooter)]
 pub fn table_footer(props: &TableFooterProps) -> Html {
     let table_current_page = props.table_current_page.deref().to_owned();
@@ -64,11 +66,13 @@ pub fn table_footer(props: &TableFooterProps) -> Html {
     }
 }
 
+/// Properties for the ArticlesPerPageDropdown component.
 #[derive(Clone, PartialEq, Properties)]
 struct ArticlesPerPageDropdownProps {
     articles_per_page: UseStateHandle<i32>,
     table_current_page: UseStateHandle<i32>
 }
+/// Component for the dropdown to select the number of articles displayed per page.
 #[function_component(ArticlesPerPageDropdown)]
 fn articles_per_page_dropdown(props: &ArticlesPerPageDropdownProps) -> Html {
     html! {
@@ -87,6 +91,7 @@ fn articles_per_page_dropdown(props: &ArticlesPerPageDropdownProps) -> Html {
     }
 }
 
+/// Properties for an item in the ArticlesPerPageDropdown.
 #[derive(Clone, PartialEq, Properties)]
 struct ArticlesPerPageDropdownItemProps {
     table_articles_per_page: UseStateHandle<i32>,
@@ -94,6 +99,7 @@ struct ArticlesPerPageDropdownItemProps {
     value: i32
 }
 
+/// Component for a single item in the articles per page dropdown.
 #[function_component(ArticlesPerPageDropdownItem)]
 fn articles_per_page_dropdown(props: &ArticlesPerPageDropdownItemProps) -> Html {
     let onclick = {
@@ -119,11 +125,13 @@ fn articles_per_page_dropdown(props: &ArticlesPerPageDropdownItemProps) -> Html 
     }
 }
 
+/// Properties for a pagination page item.
 #[derive(Clone, PartialEq, Properties)]
 struct PageItemProps {
     table_current_page: UseStateHandle<i32>,
     page_index: i32
 }
+/// Component for a single page number button in the pagination control.
 #[function_component(PageItem)]
 fn page_item(props: &PageItemProps) -> Html {
     let onclick = {

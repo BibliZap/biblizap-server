@@ -4,12 +4,15 @@ use yew::prelude::*;
 
 use crate::common::CurrentPage;
 
+/// Properties for the NavBar component.
 #[derive(Clone, PartialEq, Properties)]
 pub struct NavBarProps {
     pub current_page: UseStateHandle<CurrentPage>,
     pub dark_mode: UseStateHandle<bool>
 }
 
+/// Navigation bar component.
+/// Allows switching between different pages and toggling dark mode.
 #[function_component]
 pub fn NavBar(props: &NavBarProps) -> Html {
     let onclick_biblizap_app = {
@@ -112,6 +115,8 @@ pub fn NavBar(props: &NavBarProps) -> Html {
     }
 }
 
+/// Component to conditionally display a link to the browser plugin.
+/// Checks the user agent to determine if a Firefox plugin link should be shown.
 #[function_component]
 pub fn BrowserPluginNavItem() -> Html {
     use crate::common::{WebBrowser, Error};
@@ -130,6 +135,7 @@ pub fn BrowserPluginNavItem() -> Html {
     }
 }
 
+/// Navigation item specifically for the Firefox browser plugin link.
 #[function_component]
 pub fn FirefoxPluginNavItem() -> Html {
     html! {

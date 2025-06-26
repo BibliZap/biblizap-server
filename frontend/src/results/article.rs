@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::results::Filters;
 
+/// Struct representing an academic article with relevant metadata.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct Article {
     pub first_author: Option<String>,
@@ -15,6 +16,7 @@ pub struct Article {
 }
 
 impl Article {
+    /// Checks if any field in the article matches the given pattern (case-insensitive).
     pub fn matches_global(&self, pattern: &str) -> bool {
         let pattern_lowercase = pattern.to_lowercase();
         self.doi.as_ref().map_or(false, |x| x.to_lowercase().contains(&pattern_lowercase)) |
@@ -28,6 +30,7 @@ impl Article {
     }
 
 
+    /// Checks if the article matches all the provided filters (case-insensitive for strings).
     pub fn matches(&self, filters: &Filters) -> bool {
         self.doi.as_ref().map_or(false, |x| x.to_lowercase().contains(&filters.doi.to_lowercase())) &
         self.title.as_ref().map_or(false, |x| x.to_lowercase().contains(&filters.title.to_lowercase())) &

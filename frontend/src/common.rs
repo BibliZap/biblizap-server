@@ -3,6 +3,7 @@ use wasm_bindgen::JsValue;
 use web_sys::Navigator;
 use yew::prelude::*;
 
+/// Custom error type for the frontend application.
 #[derive(Error, Debug)]
 pub enum Error {
     #[error(transparent)]
@@ -33,6 +34,7 @@ pub enum Error {
     UnrecognizedUserAgent(String)
 }
 
+/// Enum representing missing values from NodeRefs.
 #[derive(Error, Debug)]
 pub enum NodeRefMissingValue {
     #[error("Id list is missing")]
@@ -51,6 +53,7 @@ impl From<JsValue> for Error {
     }
 }
 
+/// Enum representing the different pages in the frontend application.
 #[derive(PartialEq)]
 pub enum CurrentPage {
     BibliZapApp,
@@ -59,6 +62,7 @@ pub enum CurrentPage {
     LegalInformation
 }
 
+/// Enum representing the direction of the snowball search.
 #[derive(Clone, PartialEq, Default, Debug, serde::Serialize)]
 pub enum SearchFor {
     References,
@@ -67,6 +71,7 @@ pub enum SearchFor {
     Both
 }
 
+/// Helper function to get the value from an HTML input element referenced by a NodeRef.
 pub fn get_value(node_ref: &NodeRef) -> Option<String> {
     Some(node_ref.cast::<web_sys::HtmlInputElement>()?.value())
 }
@@ -80,6 +85,7 @@ pub enum WebBrowser {
 impl TryFrom<Navigator> for WebBrowser {
     type Error = Error;
 
+    /// Attempts to determine the web browser from the Navigator object.
     fn try_from(navigator: Navigator) -> Result<Self, Self::Error> {
         let user_agent: String = navigator.user_agent()?;
         
