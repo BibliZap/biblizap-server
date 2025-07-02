@@ -33,12 +33,12 @@ This repository contains the backend server (built with Rust and Actix-web) and 
 
 1. Clone the repository:
     ```bash
-    git clone https://github.com/BibliZap/BibliZap-server
+    git clone https://github.com/BibliZap/biblizap-server
     ```
 
 2. Navigate to the project directory:
     ```bash
-    cd BibliZap-server
+    cd biblizap-server
     ```
 
 3. Build both frontend and backend:
