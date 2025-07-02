@@ -64,7 +64,7 @@ The server requires a Lens.org API key. This is provided as a command-line argum
 Run the compiled executable, providing your Lens.org API key and optionally a port:
 
 ```bash
-cargo run --release -- --lens-api-key YOUR_LENS_API_KEY --port 8080
+./target/release/biblizap-server --lens-api-key YOUR_LENS_API_KEY --port 8080
 ```
 
 Replace `YOUR_LENS_API_KEY` with your actual key. The server will listen on the specified port (default is 8080).
