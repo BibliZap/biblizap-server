@@ -12,31 +12,43 @@ This repository contains the backend server (built with Rust and Actix-web) and 
 
 ### Prerequisites
 
-*   [Rust](https://www.rust-lang.org/tools/install) and Cargo (the Rust package manager).
-*   [Node.js](https://nodejs.org/) and npm or yarn (for building the frontend assets).
-*   A [Lens.org API key](https://www.lens.org/lens/user/api-key).
+- **Rust and Cargo** – Install via [rustup](https://rustup.rs):
+    ```bash
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+    ```
+    After installation, ensure Cargo is available:
+    ```bash
+    cargo --version
+    ```
+
+- **Trunk** – Used to build the Yew frontend:
+    ```bash
+    cargo install trunk
+    ```
+
+- **Lens.org API key** – Required for accessing citation data:
+    [Get your API key here](https://www.lens.org/lens/user/api-key)
 
 ### Installation
 
-1.  Clone the repository:
+1. Clone the repository:
     ```bash
     git clone https://github.com/BibliZap/BibliZap-server
     ```
-2.  Navigate to the project directory:
+
+2. Navigate to the project directory:
     ```bash
-    cd BibliZap/biblizap-server
+    cd BibliZap-server
     ```
-3.  Build the frontend assets (requires Node.js/npm/yarn):
+
+3. Build both frontend and backend:
     ```bash
-    cd frontend
-    npm install # or yarn install
-    npm run build # or yarn build
-    cd ..
+    ./build.sh --release
     ```
-4.  Build the Rust backend:
-    ```bash
-    cargo build --release
-    ```
+
+    This script will:
+    - Build the Yew frontend with `trunk build --release`
+    - Then compile the Actix backend with `cargo build --release`
 
 ### Configuration
 
