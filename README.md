@@ -21,12 +21,17 @@ This repository contains the backend server (built with Rust and Actix-web) and 
     cargo --version
     ```
 
+- **WASM target for Rust** – Required to compile the frontend to WebAssembly:
+    ```bash
+    rustup target add wasm32-unknown-unknown
+    ```
+
 - **Trunk** – Used to build the Yew frontend:
     ```bash
     cargo install trunk
     ```
 
-- **Lens.org API key** – Required for accessing citation data:
+- **Lens.org API key** – Required for accessing citation data:  
     [Get your API key here](https://www.lens.org/lens/user/api-key)
 
 ### Installation
