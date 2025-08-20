@@ -479,13 +479,14 @@ checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 [[package]]
 name = "biblizap-rs"
 version = "0.2.0"
-source = "git+https://github.com/BibliZap/biblizap-rs#3c9547366cfe28d93256e3f4833632dafa0de1ea"
+source = "git+https://github.com/BibliZap/biblizap-rs#3888c0e2a82f58ca48090908a9c4b393c3a4535e"
 dependencies = [
  "anyhow",
  "arrayvec",
  "async-std",
  "futures",
  "lazy_static",
+ "log",
  "nohash-hasher",
  "regex",
  "reqwest",
