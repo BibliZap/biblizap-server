@@ -198,6 +198,7 @@ pub fn SnowballForm(props: &FormProps) -> Html {
                         <option value="100" selected=true>{"100"}</option>
                         <option value="500">{"500"}</option>
                         <option value="1000">{"1000"}</option>
+                        <option value="20000">{"20000 (may take longer)"}</option>
                     </select>
                 </div>
                 </div>

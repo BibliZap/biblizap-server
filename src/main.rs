@@ -38,7 +38,7 @@ async fn handle_request(req_body: &str, lens_api_key: &str) -> Result<String, Er
     let snowball = biblizap_rs::snowball(
         &parameters.input_id_list,
         parameters.depth.clamp(1, 3),
-        parameters.output_max_size.clamp(1, 3000),
+        parameters.output_max_size.clamp(1, 20000),
         &parameters.search_for,
         lens_api_key,
     )
