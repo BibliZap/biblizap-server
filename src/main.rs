@@ -49,6 +49,7 @@ async fn handle_request(req_body: &str, lens_api_key: &str) -> Result<String, Er
     .await?;
 
     let json_str = serde_json::to_string(&snowball)?;
+    log::debug!("Sending {} articles, {} characters response", snowball.len(), json_str.len());
 
     Ok(json_str)
 }
@@ -74,6 +75,15 @@ async fn main() -> std::io::Result<()> {
     let config = web::Data::new(AppConfig {
         lens_api_key: args.lens_api_key,
     });
+
+    // Initialize logging: prefer RUST_LOG if set, otherwise use the CLI-provided log level.
+    let mut logger_builder = env_logger::Builder::from_env(env_logger::Env::default());
+    if std::env::var_os("RUST_LOG").is_none() {
+        logger_builder.filter_level(args.log_level);
+    }
+    logger_builder.init();
+
+    log::info!("Listening on http://127.0.0.1:{}", args.port);
 
     HttpServer::new(move || {
         let generated = generate();
@@ -104,4 +114,8 @@ struct Args {
     /// Port on which to listen
     #[arg(short, long, default_value_t = 8080)]
     port: u16,
+
+    /// Log level for the application
+    #[arg(short, long, default_value_t = log::LevelFilter::Info)]
+    log_level: log::LevelFilter,
 }
