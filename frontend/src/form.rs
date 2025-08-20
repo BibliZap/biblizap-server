@@ -23,7 +23,7 @@ pub struct FormProps {
 /// Struct representing the parameters for the snowball search API request.
 #[derive(Clone, PartialEq, Debug, Default, Serialize)]
 struct SnowballParameters {
-    output_max_size: usize,
+    output_max_size: String,
     depth: u8,
     input_id_list: Vec<String>,
     search_for: common::SearchFor
@@ -44,8 +44,7 @@ impl SnowballParameters {
             .collect::<Vec<String>>();
         
         let output_max_size = get_value(&output_max_size_node)
-            .ok_or(common::NodeRefMissingValue::OutputMaxSize)?
-            .parse::<usize>()?;
+            .ok_or(common::NodeRefMissingValue::OutputMaxSize)?;
 
         let depth = get_value(&depth_node)
             .ok_or(common::NodeRefMissingValue::Depth)?
@@ -188,7 +187,8 @@ pub fn SnowballForm(props: &FormProps) -> Html {
                     <label class="form-check-label" for="depthSelect">{"Select depth"}</label>
                     <select class="form-select" aria-label="Default select example" id="depthSelect" value="2" ref={depth_node.clone()}>
                         <option value="1">{"1"}</option>
-                        <option value="2" selected=true>{"2"}</option>
+                        <option value="2" selected=true>{"2 (recommended)"}</option>
+                        <option value="3">{"3 (may lead to poor results and very long processing times)"}</option>
                     </select>
                     <div id="depthSelectHelp" class="form-text">{"The recommended depth value is 2"}</div>
                 </div>
@@ -198,7 +198,7 @@ pub fn SnowballForm(props: &FormProps) -> Html {
                         <option value="100" selected=true>{"100"}</option>
                         <option value="500">{"500"}</option>
                         <option value="1000">{"1000"}</option>
-                        <option value="20000">{"20000 (may take longer)"}</option>
+                        <option value="All">{"All (may take longer)"}</option>
                     </select>
                 </div>
                 </div>

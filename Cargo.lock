@@ -506,6 +506,7 @@ dependencies = [
  "biblizap-rs",
  "change-detection",
  "clap",
+ "log",
  "reqwest",
  "serde",
  "serde_json",

@@ -14,7 +14,7 @@ struct AppConfig {
 /// Parameters received from the frontend for the snowball search.
 #[derive(Debug, Deserialize)]
 struct SnowballParameters {
-    output_max_size: usize,
+    output_max_size: String,
     depth: u8,
     input_id_list: Vec<String>,
     search_for: SearchFor,
@@ -34,11 +34,15 @@ pub enum Error {
 /// Returns a JSON string representing the search results or an error.
 async fn handle_request(req_body: &str, lens_api_key: &str) -> Result<String, Error> {
     let parameters = serde_json::from_str::<SnowballParameters>(req_body)?;
-
+    log::info!("Received request: {:?}", parameters);
     let snowball = biblizap_rs::snowball(
         &parameters.input_id_list,
         parameters.depth.clamp(1, 3),
-        parameters.output_max_size.clamp(1, 20000),
+        parameters
+            .output_max_size
+            .parse::<usize>()
+            .unwrap_or(usize::MAX)
+            .clamp(1, usize::MAX),
         &parameters.search_for,
         lens_api_key,
     )
