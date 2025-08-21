@@ -83,7 +83,7 @@ async fn main() -> std::io::Result<()> {
     }
     logger_builder.init();
 
-    log::info!("Listening on http://127.0.0.1:{}", args.port);
+    log::info!("Listening on http://{}:{}", args.bind_address, args.port);
 
     HttpServer::new(move || {
         let generated = generate();
