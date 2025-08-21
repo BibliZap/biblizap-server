@@ -123,6 +123,19 @@ pub fn results(props: &TableProps) -> Html {
             }
         })
     };
+
+    let on_bibtex_download_click = {
+        let articles = articles.clone();
+        Callback::from(move |_: MouseEvent| {
+            let bytes = to_bibtex(articles.deref().borrow().deref()).unwrap();
+            let timestamp = chrono::Local::now().to_rfc3339();
+
+            match download_bytes_as_file(&bytes, &format!("BibliZap-{timestamp}.bib")) {
+                Ok(_) => (),
+                Err(error) => {gloo_console::log!(format!("{error}"));}
+            }
+        })
+    };
     
     let articles_per_page = use_state(|| 10i32);
     let table_current_page = use_state(|| 0i32);
@@ -177,6 +190,7 @@ pub fn results(props: &TableProps) -> Html {
             <div style="display: flex; gap: 1rem; align-items: center;">
                 <DownloadButton onclick={on_excel_download_click} label="Download Excel"/>
                 <DownloadButton onclick={on_ris_download_click} label="Download RIS"/>
+                <DownloadButton onclick={on_bibtex_download_click} label="Download BibTeX"/>
             </div>
         </div>
     }

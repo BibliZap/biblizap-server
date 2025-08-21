@@ -1,5 +1,5 @@
-use web_sys::HtmlElement;
 use wasm_bindgen::prelude::*;
+use web_sys::HtmlElement;
 use yew::prelude::*;
 
 use crate::common;
@@ -18,7 +18,7 @@ pub fn to_csv(articles: &[Article]) -> Result<Vec<u8>, common::Error> {
 
     match wtr.into_inner() {
         Ok(vec) => Ok(vec),
-        Err(error) => Err(common::Error::CsvIntoInner(error.to_string()))
+        Err(error) => Err(common::Error::CsvIntoInner(error.to_string())),
     }
 }
 
@@ -44,15 +44,18 @@ pub fn to_excel(articles: &[Article]) -> Result<Vec<u8>, common::Error> {
     for col in 0..=6 {
         worksheet.set_column_format(col, &text_format)?;
     }
-    
 
     for (i, article) in articles.iter().enumerate() {
-        let i : u32 = i.try_into()?;
+        let i: u32 = i.try_into()?;
 
         worksheet.write_string(i + 1, 0, article.doi.clone().unwrap_or_default())?;
         worksheet.write_string(i + 1, 1, article.title.clone().unwrap_or_default())?;
         worksheet.write_string(i + 1, 2, article.journal.clone().unwrap_or_default())?;
-        worksheet.write_string(i + 1, 3, article.year_published.unwrap_or_default().to_string())?;
+        worksheet.write_string(
+            i + 1,
+            3,
+            article.year_published.unwrap_or_default().to_string(),
+        )?;
         worksheet.write_string(i + 1, 4, article.summary.clone().unwrap_or_default())?;
         worksheet.write_string(i + 1, 5, article.citations.unwrap_or_default().to_string())?;
         worksheet.write_string(i + 1, 6, article.score.unwrap_or_default().to_string())?;
@@ -65,13 +68,11 @@ pub fn to_excel(articles: &[Article]) -> Result<Vec<u8>, common::Error> {
     worksheet.set_column_width(2, 52)?;
     worksheet.set_column_width(4, 52)?;
     worksheet.autofilter(0, 0, articles.len().try_into()?, 6)?;
-    
 
     let buf = workbook.save_to_buffer()?;
 
     Ok(buf)
 }
-
 
 /// Converts a slice of `Article` structs into an RIS (Research Information Systems) byte vector.
 pub fn to_ris(articles: &[Article]) -> Result<Vec<u8>, common::Error> {
@@ -112,24 +113,61 @@ pub fn to_ris(articles: &[Article]) -> Result<Vec<u8>, common::Error> {
     Ok(ris)
 }
 
+pub fn to_bibtex(articles: &[Article]) -> Result<Vec<u8>, common::Error> {
+    use std::io::Write;
+    let mut bibtex = Vec::new();
+
+    for article in articles.iter() {
+        let citeid = format!(
+            "{}{}-{}-{}",
+            article.first_author.clone().unwrap_or_default(),
+            article.year_published.unwrap_or_default(),
+            article.journal.clone().unwrap_or_default().chars().take(6).collect::<String>(),
+            article.title.clone().unwrap_or_default().chars().take(6).collect::<String>()
+        );
+        writeln!(bibtex, "@article{{{},", citeid)?;
+        if let Some(author) = &article.first_author {
+            writeln!(bibtex, "  author = \"{}\",", author)?;
+        }
+        if let Some(title) = &article.title {
+            writeln!(bibtex, "  title = \"{}\",", title)?;
+        }
+        if let Some(journal) = &article.journal {
+            writeln!(bibtex, "  journal = \"{}\",", journal)?;
+        }
+        if let Some(year) = article.year_published {
+            writeln!(bibtex, "  year = {},", year)?;
+        }
+        if let Some(summary) = &article.summary {
+            writeln!(bibtex, "  abstract = \"{}\",", summary)?;
+        }
+        if let Some(doi) = &article.doi {
+            writeln!(bibtex, "  doi = \"{}\"", doi)?;
+        }
+        writeln!(bibtex, "}},")?;
+    }
+
+    Ok(bibtex)
+}
+
 /// Triggers a file download in the browser using a byte slice and filename.
 pub fn download_bytes_as_file(bytes: &[u8], filename: &str) -> Result<(), common::Error> {
     use gloo_utils::document;
-    let file_blob= gloo_file::Blob::new(bytes);
+    let file_blob = gloo_file::Blob::new(bytes);
     let download_url = web_sys::Url::create_object_url_with_blob(&file_blob.into())?;
 
-    let a = document()
-        .create_element("a")?;
-    
+    let a = document().create_element("a")?;
+
     a.set_attribute("href", &download_url)?;
     a.set_attribute("download", filename)?;
-    a.dyn_ref::<HtmlElement>().ok_or(common::Error::HtmlElementDynRef)?.click();
+    a.dyn_ref::<HtmlElement>()
+        .ok_or(common::Error::HtmlElementDynRef)?
+        .click();
 
     document().remove_child(&a)?;
 
     Ok(())
 }
-
 
 /// Properties for the DownloadButton component.
 #[derive(Clone, PartialEq, Properties)]
