@@ -175,9 +175,9 @@ use clap::Parser;
         after_long_help = color_print::cstr!(
 r#"<bold><underline>Configuration:</underline></bold>
 Configuration files are searched in the following order:
-        ./biblizap.toml
-        $XDG_CONFIG_HOME/biblizap/biblizap.toml (falls back to $HOME/.config/biblizap/biblizap.toml)
-        /etc/biblizap/biblizap.toml
+    ./biblizap.toml
+    $XDG_CONFIG_HOME/biblizap/biblizap.toml (falls back to $HOME/.config/biblizap/biblizap.toml)
+    /etc/biblizap/biblizap.toml
 
 Environment variables with the prefix BIBLIZAP_ are also read (e.g. BIBLIZAP_LENS_API_KEY).
 
