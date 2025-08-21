@@ -98,13 +98,26 @@ pub fn results(props: &TableProps) -> Html {
         .cloned()
         .collect::<Vec<_>>();
 
-    let on_download_click = {
+    let on_excel_download_click = {
         let articles = articles.clone();
         Callback::from(move |_: MouseEvent| {
             let bytes = to_excel(articles.deref().borrow().deref()).unwrap();
             let timestamp = chrono::Local::now().to_rfc3339();
 
             match download_bytes_as_file(&bytes, &format!("BibliZap-{timestamp}.xlsx")) {
+                Ok(_) => (),
+                Err(error) => {gloo_console::log!(format!("{error}"));}
+            }
+        })
+    };
+
+    let on_ris_download_click = {
+        let articles = articles.clone();
+        Callback::from(move |_: MouseEvent| {
+            let bytes = to_ris(articles.deref().borrow().deref()).unwrap();
+            let timestamp = chrono::Local::now().to_rfc3339();
+
+            match download_bytes_as_file(&bytes, &format!("BibliZap-{timestamp}.ris")) {
                 Ok(_) => (),
                 Err(error) => {gloo_console::log!(format!("{error}"));}
             }
@@ -161,7 +174,10 @@ pub fn results(props: &TableProps) -> Html {
                 </tbody>
             </table>
             <TableFooter article_total_number={articles_to_display.len()} articles_per_page={articles_per_page} table_current_page={table_current_page}/>
-            <DownloadButton onclick={on_download_click}/>
+            <div style="display: flex; gap: 1rem; align-items: center;">
+                <DownloadButton onclick={on_excel_download_click} label="Download Excel"/>
+                <DownloadButton onclick={on_ris_download_click} label="Download RIS"/>
+            </div>
         </div>
     }
 }

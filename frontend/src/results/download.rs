@@ -72,6 +72,46 @@ pub fn to_excel(articles: &[Article]) -> Result<Vec<u8>, common::Error> {
     Ok(buf)
 }
 
+
+/// Converts a slice of `Article` structs into an RIS (Research Information Systems) byte vector.
+pub fn to_ris(articles: &[Article]) -> Result<Vec<u8>, common::Error> {
+    use std::io::Write;
+    let mut ris = Vec::new();
+
+    for article in articles.iter() {
+        writeln!(ris, "TY  - JOUR")?;
+        if let Some(author) = &article.first_author {
+            writeln!(ris, "AU  - {}", author)?;
+        }
+        if let Some(title) = &article.title {
+            writeln!(ris, "TI  - {}", title)?;
+        }
+        if let Some(journal) = &article.journal {
+            writeln!(ris, "JO  - {}", journal)?;
+        }
+        if let Some(year) = article.year_published {
+            writeln!(ris, "PY  - {}", year)?;
+        }
+        if let Some(summary) = &article.summary {
+            writeln!(ris, "AB  - {}", summary)?;
+        }
+
+        // DOI can have multiple fields, so we fill all of them
+        if let Some(doi) = &article.doi {
+            writeln!(ris, "DI  - {}", doi)?;
+        }
+        if let Some(doi) = &article.doi {
+            writeln!(ris, "DOI  - {}", doi)?;
+        }
+        if let Some(doi) = &article.doi {
+            writeln!(ris, "DO  - {}", doi)?;
+        }
+        writeln!(ris, "ER  - ")?;
+    }
+
+    Ok(ris)
+}
+
 /// Triggers a file download in the browser using a byte slice and filename.
 pub fn download_bytes_as_file(bytes: &[u8], filename: &str) -> Result<(), common::Error> {
     use gloo_utils::document;
@@ -94,7 +134,8 @@ pub fn download_bytes_as_file(bytes: &[u8], filename: &str) -> Result<(), common
 /// Properties for the DownloadButton component.
 #[derive(Clone, PartialEq, Properties)]
 pub struct ButtonProps {
-    pub onclick: Callback<MouseEvent>
+    pub label: String,
+    pub onclick: Callback<MouseEvent>,
 }
 
 /// Component for the download button.
@@ -102,7 +143,7 @@ pub struct ButtonProps {
 pub fn download_button(props: &ButtonProps) -> Html {
     html! {
         <div>
-            <button class="btn btn-outline-secondary btn-lg mb-10" onclick={props.onclick.clone()}><i class="bi bi-download me-2"></i>{"Download articles"}</button>
+            <button class="btn btn-outline-secondary btn-lg mb-10" onclick={props.onclick.clone()}><i class="bi bi-download me-2"></i>{&props.label}</button>
         </div>
     }
 }
