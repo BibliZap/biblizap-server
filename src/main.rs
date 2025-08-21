@@ -112,7 +112,7 @@ struct Args {
     lens_api_key: String,
 
     /// Port on which to listen
-    #[arg(short, long, default_value_t = 8080)]
+    #[arg(short, long, default_value_t = 35642)]
     port: u16,
 
     /// Log level for the application
