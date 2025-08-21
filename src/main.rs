@@ -1,6 +1,8 @@
 use actix_web::{web, App, HttpRequest, HttpResponse, HttpServer, Responder};
 use biblizap_rs::SearchFor;
+use config as conf;
 use serde::Deserialize;
+use std::env;
 use thiserror::Error;
 
 // Includes the generated code for static files (frontend build).
@@ -9,6 +11,14 @@ include!(concat!(env!("OUT_DIR"), "/generated.rs"));
 /// Application configuration holding necessary secrets/settings.
 struct AppConfig {
     lens_api_key: String,
+}
+
+/// Configuration that can be loaded from `biblizap.toml`.
+#[derive(Debug, Deserialize, Default)]
+struct FileConfig {
+    lens_api_key: Option<String>,
+    bind_address: Option<String>,
+    port: Option<u16>,
 }
 
 /// Parameters received from the frontend for the snowball search.
@@ -49,7 +59,11 @@ async fn handle_request(req_body: &str, lens_api_key: &str) -> Result<String, Er
     .await?;
 
     let json_str = serde_json::to_string(&snowball)?;
-    log::debug!("Sending {} articles, {} characters response", snowball.len(), json_str.len());
+    log::debug!(
+        "Sending {} articles, {} characters response",
+        snowball.len(),
+        json_str.len()
+    );
 
     Ok(json_str)
 }
@@ -72,9 +86,6 @@ async fn api(req_body: String, _: HttpRequest, config: web::Data<AppConfig>) -> 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let args = Args::parse();
-    let config = web::Data::new(AppConfig {
-        lens_api_key: args.lens_api_key,
-    });
 
     // Initialize logging: prefer RUST_LOG if set, otherwise use the CLI-provided log level.
     let mut logger_builder = env_logger::Builder::from_env(env_logger::Env::default());
@@ -83,7 +94,59 @@ async fn main() -> std::io::Result<()> {
     }
     logger_builder.init();
 
-    log::info!("Listening on http://{}:{}", args.bind_address, args.port);
+    // Load configuration files (defaults < config file < env < CLI)
+    // Precedence (highest -> lowest): ./biblizap.toml  >  $XDG_CONFIG_HOME/biblizap/biblizap.toml  >  /etc/biblizap/biblizap.toml
+    // Use XDG_CONFIG_HOME if present, otherwise fall back to $HOME/.config
+    let user_config_dir = env::var("XDG_CONFIG_HOME").ok().unwrap_or_else(|| {
+        let home = env::var("HOME").unwrap_or_default();
+        format!("{}/.config", home)
+    });
+
+    let builder = conf::Config::builder()
+        .add_source(conf::File::with_name("/etc/biblizap/biblizap.toml").required(false))
+        .add_source(
+            conf::File::with_name(&format!("{}/biblizap/biblizap.toml", user_config_dir))
+                .required(false),
+        )
+        .add_source(conf::File::with_name("biblizap.toml").required(false))
+        .add_source(conf::Environment::with_prefix("BIBLIZAP").separator("__"));
+
+    let settings = builder.build().unwrap_or_else(|e| {
+        log::warn!("failed to build config: {}", e);
+        conf::Config::builder().build().unwrap()
+    });
+
+    let file_cfg: FileConfig = settings.try_deserialize().unwrap_or_default();
+
+    // Defaults
+    const DEFAULT_BIND: &str = "127.0.0.1";
+    const DEFAULT_PORT: u16 = 35642;
+
+    // Merge: cli > config file > defaults
+    let bind_address = args
+        .bind_address
+        .clone()
+        .or(file_cfg.bind_address)
+        .unwrap_or_else(|| DEFAULT_BIND.to_string());
+
+    let port = args.port.or(file_cfg.port).unwrap_or(DEFAULT_PORT);
+
+    // lens api key: CLI -> config file -> env var -> error
+    let lens_api_key = args
+        .lens_api_key
+        .clone()
+        .or(file_cfg.lens_api_key)
+        .or_else(|| env::var("BIBLIZAP_LENS_API_KEY").ok())
+        .unwrap_or_else(|| {
+            log::error!(
+                "Lens API key is required via CLI, config file, or BIBLIZAP_LENS_API_KEY env"
+            );
+            std::process::exit(1);
+        });
+
+    let config = web::Data::new(AppConfig { lens_api_key });
+
+    log::info!("Listening on http://{}:{}", bind_address, port);
 
     HttpServer::new(move || {
         let generated = generate();
@@ -96,7 +159,7 @@ async fn main() -> std::io::Result<()> {
             )
             .service(actix_web_static_files::ResourceFiles::new("/", generated))
     })
-    .bind((args.bind_address, args.port))?
+    .bind((bind_address, port))?
     .run()
     .await
 }
@@ -104,20 +167,41 @@ async fn main() -> std::io::Result<()> {
 use clap::Parser;
 
 /// Run an instance of BibliZap
-#[derive(Parser, Debug)]
-#[command(version, about, long_about = None)]
+#[derive(Parser, Debug, Clone)]
+#[command(
+        version,
+        about,
+        long_about = None,
+        after_long_help = color_print::cstr!(
+r#"<bold><underline>Configuration:</underline></bold>
+Configuration files are searched in the following order:
+        ./biblizap.toml
+        $XDG_CONFIG_HOME/biblizap/biblizap.toml (falls back to $HOME/.config/biblizap/biblizap.toml)
+        /etc/biblizap/biblizap.toml
+
+Environment variables with the prefix BIBLIZAP_ are also read (e.g. BIBLIZAP_LENS_API_KEY).
+
+Values available in the config:
+    - bind_address
+    - port
+    - lens_api_key
+
+Secrets (Lens API key): prefer keeping `biblizap.toml` file mode 600, or set BIBLIZAP_LENS_API_KEY.
+
+CLI flags override config and env."#),
+)]
 struct Args {
-    /// Your Lens.org API key (required)
+    /// Your Lens.org API key (optional; can come from config or env)
     #[arg(short, long)]
-    lens_api_key: String,
+    lens_api_key: Option<String>,
 
-    /// Address to bind the server
-    #[arg(short, long, default_value = "127.0.0.1")]
-    bind_address: String,
+    /// Address to bind the server (optional; overrides config)
+    #[arg(short, long)]
+    bind_address: Option<String>,
 
-    /// Port on which to listen
-    #[arg(short, long, default_value_t = 35642)]
-    port: u16,
+    /// Port on which to listen (optional; overrides config)
+    #[arg(short, long)]
+    port: Option<u16>,
 
     /// Log level for the application
     #[arg(short, long, default_value_t = log::LevelFilter::Info)]
