@@ -96,7 +96,7 @@ async fn main() -> std::io::Result<()> {
             )
             .service(actix_web_static_files::ResourceFiles::new("/", generated))
     })
-    .bind(("127.0.0.1", args.port))?
+    .bind((args.bind_address, args.port))?
     .run()
     .await
 }
@@ -107,9 +107,13 @@ use clap::Parser;
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
-    /// Your Lens.org API key
+    /// Your Lens.org API key (required)
     #[arg(short, long)]
     lens_api_key: String,
+
+    /// Address to bind the server
+    #[arg(short, long, default_value = "127.0.0.1")]
+    bind_address: String,
 
     /// Port on which to listen
     #[arg(short, long, default_value_t = 35642)]
