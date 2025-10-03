@@ -80,16 +80,16 @@ pub struct TableProps {
 /// Includes global search, column sorting, column filtering, pagination, and download options.
 #[function_component(Results)]
 pub fn results(props: &TableProps) -> Html {
-    let selected_articles = use_state(|| HashSet::<String>::new());
+    let selected_articles = use_state(|| Rc::new(RefCell::new(HashSet::<String>::new())));
 
     let update_selected = {
         let selected_articles = selected_articles.clone();
         Callback::from(move |element: (String, bool)| {
-            let mut current_selected = (*selected_articles).clone();
+            let current_selected = (*selected_articles).clone();
             if element.1 {
-                current_selected.insert(element.0);
+                current_selected.borrow_mut().insert(element.0);
             } else {
-                current_selected.remove(&element.0);
+                current_selected.borrow_mut().remove(&element.0);
             }
             selected_articles.set(current_selected);
         })
@@ -114,7 +114,7 @@ pub fn results(props: &TableProps) -> Html {
         let articles = articles.clone();
         let selected_articles = selected_articles.clone();
         move || -> Vec<Article> {
-            if selected_articles.is_empty() {
+            if selected_articles.borrow().is_empty() {
                 // If nothing selected, return all articles
                 articles.deref().borrow().clone()
             } else {
@@ -127,7 +127,7 @@ pub fn results(props: &TableProps) -> Html {
                         article
                             .doi
                             .as_ref()
-                            .map(|doi| selected_articles.contains(doi))
+                            .map(|doi| selected_articles.borrow().contains(doi))
                             .unwrap_or(false)
                     })
                     .cloned()
@@ -256,10 +256,10 @@ pub fn results(props: &TableProps) -> Html {
             <TableFooter article_total_number={articles_to_display.len()} articles_per_page={articles_per_page} table_current_page={table_current_page}/>
             <div style="display: flex; gap: 1rem; align-items: center;">
                 <h5>{
-                    if selected_articles.is_empty() {
+                    if selected_articles.borrow().is_empty() {
                         "Download everything as:".to_string()
                     } else {
-                        format!("Download {} selected articles as:", selected_articles.len())
+                        format!("Download {} selected articles as:", selected_articles.borrow().len())
                     }
                 }</h5>
                 <DownloadButton onclick={on_excel_download_click} label="Excel"/>

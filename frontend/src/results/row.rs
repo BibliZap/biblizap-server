@@ -1,5 +1,5 @@
 use super::Article;
-use std::collections::HashSet;
+use std::{cell::RefCell, collections::HashSet, rc::Rc};
 use yew::prelude::*;
 
 /// Properties for a table row component.
@@ -7,7 +7,7 @@ use yew::prelude::*;
 pub struct RowProps {
     pub article: Article,
     pub update_selected: Callback<(String, bool)>,
-    pub selected_articles: HashSet<String>,
+    pub selected_articles: Rc<RefCell<HashSet<String>>>,
 }
 /// Component for a single row in the results table.
 /// Displays article information and a checkbox for selection.
@@ -22,7 +22,7 @@ pub fn row(props: &RowProps) -> Html {
         .article
         .doi
         .as_ref()
-        .map(|doi| props.selected_articles.contains(doi))
+        .map(|doi| props.selected_articles.borrow().contains(doi))
         .unwrap_or(false);
 
     let onchange = {
