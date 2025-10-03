@@ -1,6 +1,6 @@
-use std::{cell::RefCell, ops::DerefMut};
 use std::ops::Deref;
 use std::rc::Rc;
+use std::{cell::RefCell, ops::DerefMut};
 
 use yew::prelude::*;
 
@@ -22,7 +22,7 @@ pub enum ResultsStatus {
     NotRequested,
     Requested,
     RequestError(String),
-    Available(Rc<RefCell<Vec<Article>>>)
+    Available(Rc<RefCell<Vec<Article>>>),
 }
 
 /// Properties for the ResultsContainer component.
@@ -33,12 +33,20 @@ pub struct ResultsContainerProps {
 /// Container component for displaying search results.
 /// Renders a spinner, error message, or the results table based on the `results_status`.
 #[function_component(ResultsContainer)]
-pub fn table_container(props: &ResultsContainerProps) -> Html  {
+pub fn table_container(props: &ResultsContainerProps) -> Html {
     let content = match props.results_status.deref() {
-        ResultsStatus::NotRequested => { html! { } }
-        ResultsStatus::Available(articles) => { html! {<Results articles={articles}/>} }
-        ResultsStatus::Requested => { html! {<Spinner/>} }
-        ResultsStatus::RequestError(msg) =>  { html! {<Error msg={msg.to_owned()}/>} }
+        ResultsStatus::NotRequested => {
+            html! {}
+        }
+        ResultsStatus::Available(articles) => {
+            html! {<Results articles={articles}/>}
+        }
+        ResultsStatus::Requested => {
+            html! {<Spinner/>}
+        }
+        ResultsStatus::RequestError(msg) => {
+            html! {<Error msg={msg.to_owned()}/>}
+        }
     };
 
     content
@@ -73,10 +81,10 @@ pub fn results(props: &TableProps) -> Html {
 
     let update_selected = {
         let selected_articles = selected_articles.clone();
-        Callback::from(move |element : (String, bool)| {
+        Callback::from(move |element: (String, bool)| {
             let rc = selected_articles.deref().to_owned();
             if element.1 {
-                rc.deref().borrow_mut().push(element.0); 
+                rc.deref().borrow_mut().push(element.0);
             } else {
                 rc.deref().borrow_mut().retain(|x| *x != element.0)
             }
@@ -88,7 +96,7 @@ pub fn results(props: &TableProps) -> Html {
     let global_filter = use_state(|| "".to_string());
     let filters = use_mut_ref(Filters::default);
     let filters = use_state(|| filters);
-    
+
     let articles_to_display = articles
         .deref()
         .borrow()
@@ -106,7 +114,9 @@ pub fn results(props: &TableProps) -> Html {
 
             match download_bytes_as_file(&bytes, &format!("BibliZap-{timestamp}.xlsx")) {
                 Ok(_) => (),
-                Err(error) => {gloo_console::log!(format!("{error}"));}
+                Err(error) => {
+                    gloo_console::log!(format!("{error}"));
+                }
             }
         })
     };
@@ -119,7 +129,9 @@ pub fn results(props: &TableProps) -> Html {
 
             match download_bytes_as_file(&bytes, &format!("BibliZap-{timestamp}.ris")) {
                 Ok(_) => (),
-                Err(error) => {gloo_console::log!(format!("{error}"));}
+                Err(error) => {
+                    gloo_console::log!(format!("{error}"));
+                }
             }
         })
     };
@@ -132,16 +144,20 @@ pub fn results(props: &TableProps) -> Html {
 
             match download_bytes_as_file(&bytes, &format!("BibliZap-{timestamp}.bib")) {
                 Ok(_) => (),
-                Err(error) => {gloo_console::log!(format!("{error}"));}
+                Err(error) => {
+                    gloo_console::log!(format!("{error}"));
+                }
             }
         })
     };
-    
+
     let articles_per_page = use_state(|| 10i32);
     let table_current_page = use_state(|| 0i32);
 
-    let first_article = (table_current_page.deref() * articles_per_page.deref()).clamp(0, articles_to_display.len() as i32) as usize;
-    let last_article = (first_article as i32 + articles_per_page.deref()).clamp(0, articles_to_display.len() as i32) as usize;
+    let first_article = (table_current_page.deref() * articles_per_page.deref())
+        .clamp(0, articles_to_display.len() as i32) as usize;
+    let last_article = (first_article as i32 + articles_per_page.deref())
+        .clamp(0, articles_to_display.len() as i32) as usize;
     let articles_slice = &articles_to_display[first_article..last_article];
 
     let trigger_update = use_force_update();
@@ -150,7 +166,7 @@ pub fn results(props: &TableProps) -> Html {
             trigger_update.force_update();
         })
     };
-    
+
     html! {
         <div id="table" class="container-fluid">
             <hr/>
@@ -188,14 +204,14 @@ pub fn results(props: &TableProps) -> Html {
             </table>
             <TableFooter article_total_number={articles_to_display.len()} articles_per_page={articles_per_page} table_current_page={table_current_page}/>
             <div style="display: flex; gap: 1rem; align-items: center;">
-                <DownloadButton onclick={on_excel_download_click} label="Download Excel"/>
-                <DownloadButton onclick={on_ris_download_click} label="Download RIS"/>
-                <DownloadButton onclick={on_bibtex_download_click} label="Download BibTeX"/>
+                <h5>{"Download everything as:"}</h5>
+                <DownloadButton onclick={on_excel_download_click} label="Excel"/>
+                <DownloadButton onclick={on_ris_download_click} label="RIS"/>
+                <DownloadButton onclick={on_bibtex_download_click} label="BibTeX"/>
             </div>
         </div>
     }
 }
-
 
 /// Properties for table header cells that support sorting.
 #[derive(Clone, PartialEq, Properties)]
@@ -244,7 +260,7 @@ macro_rules! header_cell {
                         <div class="row"><strong>{inflections::case::to_title_case(&stringify!{[<$field:snake>]})}</strong></div>
                         <button class="btn btn-outline-secondary col" onclick={sort_reverse}><i class="bi bi-sort-up"></i></button>
                         <button class="btn btn-outline-secondary col" onclick={sort}><i class="bi bi-sort-down"></i></button>
-                        
+
                     </th>
                 }
             }
@@ -264,7 +280,7 @@ macro_rules! header_cell {
                         redraw_table.emit(())
                     })
                 };
-            
+
                 html! {
                     <th><div class="form-check ps-0"><input type="text" class="form-control" oninput={oninput} ref={input_node_ref}/></div></th>
                 }
@@ -296,7 +312,10 @@ fn table_global_filter(props: &TableGlobalSearchProps) -> Html {
         let filter = props.filter.clone();
         let input_node_ref = input_node_ref.clone();
         Callback::from(move |_: InputEvent| {
-            let value = input_node_ref.cast::<web_sys::HtmlInputElement>().unwrap().value();
+            let value = input_node_ref
+                .cast::<web_sys::HtmlInputElement>()
+                .unwrap()
+                .value();
             filter.set(value);
         })
     };
@@ -315,7 +334,7 @@ fn table_global_filter(props: &TableGlobalSearchProps) -> Html {
 #[derive(Clone, PartialEq, Properties)]
 pub struct RowProps {
     article: Article,
-    update_selected: Callback<(String, bool)>
+    update_selected: Callback<(String, bool)>,
 }
 /// Component for a single row in the results table.
 /// Displays article information and a checkbox for selection.
@@ -332,8 +351,12 @@ pub fn row(props: &RowProps) -> Html {
         Callback::from(move |event: Event| {
             let update_selected = update_selected.clone();
             let doi = doi.clone();
-            let checked = event.target_unchecked_into::<web_sys::HtmlInputElement>().checked();
-            if let Some(doi) = doi { update_selected.emit((doi, checked)) }
+            let checked = event
+                .target_unchecked_into::<web_sys::HtmlInputElement>()
+                .checked();
+            if let Some(doi) = doi {
+                update_selected.emit((doi, checked))
+            }
         })
     };
 
@@ -355,7 +378,7 @@ pub fn row(props: &RowProps) -> Html {
 /// Properties for the Error component.
 #[derive(Clone, PartialEq, Properties)]
 pub struct ErrorProps {
-    msg: AttrValue
+    msg: AttrValue,
 }
 
 /// Component for displaying an error message.
