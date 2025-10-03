@@ -8,14 +8,14 @@ pub fn legal_information() -> Html {
 
     let mut creators: [&str; 3] = ["Bastien Le Guellec", "Raphaël Bentégeac", "Victor Leblanc"];
     creators.shuffle(&mut rng);
-    
+
     let creators = creators.join(", ");
 
     html! {
         <div class="container-md">
             <h1 class="mb-4"><i class="bi bi-info-circle-fill px-2"></i>{"Legal Information"}</h1>
             <h3>{"Disclaimer"}</h3>
-            
+
             <p class="p-3">
                 {"The information provided on this website is for general informational purposes only and is extracted from the website Lens.org."}<br/>
                 {"While we strive to keep the information up to date and accurate, we make no representations or warranties of any kind, express or implied, about the completeness, accuracy, reliability, suitability, or availability with respect to the website or the information, products, services, or related graphics contained on the website for any purpose."}<br/>
@@ -39,13 +39,13 @@ pub fn legal_information() -> Html {
                 {"BP 80157 59053 ROUBAIX CEDEX 1"}<br/>
                 {"FRANCE"}
             </p>
-            
+
             <h3>{"Inventors"}</h3>
             <p class="p-3">
                 {"BibliZap was created and developped by :"}<br/>
                 {creators}
             </p>
-            
+
         </div>
     }
 }
@@ -57,9 +57,9 @@ pub fn how_it_works() -> Html {
         <div class="container-md">
             <h1 class="mb-4"><i class="bi bi-lightbulb-fill px-2"></i>{"General principle"}</h1>
             <h3>{"BibliZap is a free and open-source project"}</h3>
-            
+
             <p class="p-3">
-                {"BibliZap aims to catalog articles similar to the source article based on both upward and downward citations."}<br/>
+                {"BibliZap aims to catalog articles similar to the source article based on bidirectional citation searching."}<br/>
                 {"Downward citations correspond to the references of the articles (their bibliography)."}<br/>
                 {"Upward citations correspond to the articles citing the source article."}
             </p>
@@ -75,13 +75,13 @@ pub fn how_it_works() -> Html {
                 </div>
             </div>
 
-            
-            
+
+
             <p class="p-3">{"At each level, the number of times each PMID appears is recorded. At the end of the process, the sum of occurrences provides the score. For instance, if an article is found once in the references of the source article, then is discovered 6 times in the articles cited by the articles that are cited by the source article, and is not found elsewhere, its score will be 7."}</p>
             <h1 class="mb-4"><i class="bi bi-database-fill px-2"></i>{"Data sources"}</h1>
             <p class="p-3">{"Meta-data from articles are provided by The Lens, a not-for-profit service from Cambia. The Lens gathers and harmonises bibliographic data from different sources (Crossref, PubMed, Microsoft Academic, ...)"}</p>
-            
-            
+
+
             <div class="container">
                 <div class="row">
                     <div class="col-md">
@@ -101,7 +101,7 @@ pub fn how_it_works() -> Html {
             <p class="p-3">
                 {"Yes, there is a potential risk of BibliZap contributing to citation bias."}<br/>
                 {"Therefore, it is extremely important to always conduct keyword-based article searches in parallel."}<br/>
-                {"This is especially crucial when you intend to publish your work."}
+                {"This is especially crucial if you intend to publish your work."}
             </p>
         </div>
     }
@@ -114,7 +114,7 @@ pub fn contact() -> Html {
         <div class="container-md">
             <h1 class="mb-4"><i class="bi bi-send-fill px-2"></i>{"Contact"}</h1>
             <h3>{"Issues"}</h3>
-            
+
             <p class="p-3">
                 {"Regarding issues you may go to "}<a href={"https://github.com/BibliZap/BibliZap"}>{"our github repo"}</a><br/>
                 {"Don't forget to search the existing issues for something similar."}<br/>
