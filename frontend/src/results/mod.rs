@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::ops::Deref;
 use std::rc::Rc;
 use std::{cell::RefCell, ops::DerefMut};
@@ -76,19 +77,18 @@ pub struct TableProps {
 /// Includes global search, column sorting, column filtering, pagination, and download options.
 #[function_component(Results)]
 pub fn results(props: &TableProps) -> Html {
-    let selected_articles = use_mut_ref(Vec::<String>::new);
-    let selected_articles = use_state(|| selected_articles);
+    let selected_articles = use_state(|| HashSet::<String>::new());
 
     let update_selected = {
         let selected_articles = selected_articles.clone();
         Callback::from(move |element: (String, bool)| {
-            let rc = selected_articles.deref().to_owned();
+            let mut current_selected = (*selected_articles).clone();
             if element.1 {
-                rc.deref().borrow_mut().push(element.0);
+                current_selected.insert(element.0);
             } else {
-                rc.deref().borrow_mut().retain(|x| *x != element.0)
+                current_selected.remove(&element.0);
             }
-            selected_articles.set(rc);
+            selected_articles.set(current_selected);
         })
     };
 
@@ -106,13 +106,47 @@ pub fn results(props: &TableProps) -> Html {
         .cloned()
         .collect::<Vec<_>>();
 
+    // Helper function to get articles to download
+    let get_articles_to_download = {
+        let articles = articles.clone();
+        let selected_articles = selected_articles.clone();
+        move || -> Vec<Article> {
+            if selected_articles.is_empty() {
+                // If nothing selected, return all articles
+                articles.deref().borrow().clone()
+            } else {
+                // Return only selected articles
+                articles
+                    .deref()
+                    .borrow()
+                    .iter()
+                    .filter(|article| {
+                        article
+                            .doi
+                            .as_ref()
+                            .map(|doi| selected_articles.contains(doi))
+                            .unwrap_or(false)
+                    })
+                    .cloned()
+                    .collect()
+            }
+        }
+    };
+
     let on_excel_download_click = {
+        let get_articles = get_articles_to_download.clone();
         let articles = articles.clone();
         Callback::from(move |_: MouseEvent| {
-            let bytes = to_excel(articles.deref().borrow().deref()).unwrap();
+            let articles_to_download = get_articles();
+            let bytes = to_excel(&articles_to_download).unwrap();
             let timestamp = chrono::Local::now().to_rfc3339();
+            let suffix = if articles_to_download.len() == articles.deref().borrow().len() {
+                "all"
+            } else {
+                "selected"
+            };
 
-            match download_bytes_as_file(&bytes, &format!("BibliZap-{timestamp}.xlsx")) {
+            match download_bytes_as_file(&bytes, &format!("BibliZap-{suffix}-{timestamp}.xlsx")) {
                 Ok(_) => (),
                 Err(error) => {
                     gloo_console::log!(format!("{error}"));
@@ -122,12 +156,19 @@ pub fn results(props: &TableProps) -> Html {
     };
 
     let on_ris_download_click = {
+        let get_articles = get_articles_to_download.clone();
         let articles = articles.clone();
         Callback::from(move |_: MouseEvent| {
-            let bytes = to_ris(articles.deref().borrow().deref()).unwrap();
+            let articles_to_download = get_articles();
+            let bytes = to_ris(&articles_to_download).unwrap();
             let timestamp = chrono::Local::now().to_rfc3339();
+            let suffix = if articles_to_download.len() == articles.deref().borrow().len() {
+                "all"
+            } else {
+                "selected"
+            };
 
-            match download_bytes_as_file(&bytes, &format!("BibliZap-{timestamp}.ris")) {
+            match download_bytes_as_file(&bytes, &format!("BibliZap-{suffix}-{timestamp}.ris")) {
                 Ok(_) => (),
                 Err(error) => {
                     gloo_console::log!(format!("{error}"));
@@ -137,12 +178,19 @@ pub fn results(props: &TableProps) -> Html {
     };
 
     let on_bibtex_download_click = {
+        let get_articles = get_articles_to_download.clone();
         let articles = articles.clone();
         Callback::from(move |_: MouseEvent| {
-            let bytes = to_bibtex(articles.deref().borrow().deref()).unwrap();
+            let articles_to_download = get_articles();
+            let bytes = to_bibtex(&articles_to_download).unwrap();
             let timestamp = chrono::Local::now().to_rfc3339();
+            let suffix = if articles_to_download.len() == articles.deref().borrow().len() {
+                "all"
+            } else {
+                "selected"
+            };
 
-            match download_bytes_as_file(&bytes, &format!("BibliZap-{timestamp}.bib")) {
+            match download_bytes_as_file(&bytes, &format!("BibliZap-{suffix}-{timestamp}.bib")) {
                 Ok(_) => (),
                 Err(error) => {
                     gloo_console::log!(format!("{error}"));
@@ -199,12 +247,18 @@ pub fn results(props: &TableProps) -> Html {
                     </tr>
                 </thead>
                 <tbody class="table-group-divider">
-                    { articles_slice.iter().map(|article| html!{<Row article={article.clone()} update_selected={update_selected.clone()}/>} ).collect::<Html>() }
+                    { articles_slice.iter().map(|article| html!{<Row article={article.clone()} update_selected={update_selected.clone()} selected_articles={(*selected_articles).clone()}/>} ).collect::<Html>() }
                 </tbody>
             </table>
             <TableFooter article_total_number={articles_to_display.len()} articles_per_page={articles_per_page} table_current_page={table_current_page}/>
             <div style="display: flex; gap: 1rem; align-items: center;">
-                <h5>{"Download everything as:"}</h5>
+                <h5>{
+                    if selected_articles.is_empty() {
+                        "Download everything as:".to_string()
+                    } else {
+                        format!("Download {} selected articles as:", selected_articles.len())
+                    }
+                }</h5>
                 <DownloadButton onclick={on_excel_download_click} label="Excel"/>
                 <DownloadButton onclick={on_ris_download_click} label="RIS"/>
                 <DownloadButton onclick={on_bibtex_download_click} label="BibTeX"/>
@@ -335,6 +389,7 @@ fn table_global_filter(props: &TableGlobalSearchProps) -> Html {
 pub struct RowProps {
     article: Article,
     update_selected: Callback<(String, bool)>,
+    selected_articles: HashSet<String>,
 }
 /// Component for a single row in the results table.
 /// Displays article information and a checkbox for selection.
@@ -344,6 +399,13 @@ pub fn row(props: &RowProps) -> Html {
         let doi = doi?;
         Some(format!("https://doi.org/{}", doi))
     }
+
+    let is_selected = props
+        .article
+        .doi
+        .as_ref()
+        .map(|doi| props.selected_articles.contains(doi))
+        .unwrap_or(false);
 
     let onchange = {
         let update_selected = props.update_selected.clone();
@@ -362,7 +424,7 @@ pub fn row(props: &RowProps) -> Html {
 
     html! {
         <tr>
-            <td><input type={"checkbox"} class={"row-checkbox"} onchange={onchange}/></td>
+            <td><input type={"checkbox"} class={"row-checkbox"} checked={is_selected} onchange={onchange}/></td>
             <td style=""><a href={doi_link(props.article.doi.clone())} style="word-wrap: break-word">{props.article.doi.clone().unwrap_or_default()}</a></td>
             <td style="word-wrap: break-word">{props.article.title.clone().unwrap_or_default()}</td>
             <td style="word-wrap: break-word">{props.article.journal.clone().unwrap_or_default()}</td>
