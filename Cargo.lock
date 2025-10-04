@@ -496,8 +496,8 @@ checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
 name = "biblizap-rs"
-version = "0.2.1"
-source = "git+https://github.com/BibliZap/biblizap-rs#f86bbf4db31a965c6f7553768b1242d96d6d0fa5"
+version = "0.2.2"
+source = "git+https://github.com/BibliZap/biblizap-rs#36e99fc01c3a7cd80a75b940489322bdb3611016"
 dependencies = [
  "anyhow",
  "arrayvec",

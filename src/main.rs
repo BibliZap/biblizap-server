@@ -75,8 +75,14 @@ async fn api(req_body: String, _: HttpRequest, config: web::Data<AppConfig>) -> 
     let snowball = handle_request(&req_body, &config.lens_api_key).await;
 
     match snowball {
-        Ok(snowball) => HttpResponse::Ok().body(snowball),
-        Err(error) => HttpResponse::InternalServerError().body(format!("{error:#?}")),
+        Ok(snowball) => {
+            log::info!("Request completed successfully");
+            HttpResponse::Ok().body(snowball)
+        }
+        Err(error) => {
+            log::error!("Request failed: {error:#?}");
+            HttpResponse::InternalServerError().body(format!("{error:#?}"))
+        }
     }
 }
 
