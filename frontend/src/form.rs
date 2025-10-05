@@ -4,10 +4,10 @@ use std::rc::Rc;
 use serde::Serialize;
 use yew::prelude::*;
 
-use crate::common::{self, SearchFor, get_value};
+use crate::common::{self, get_value, SearchFor};
 
-use crate::results::article::Article;
 use crate::common::*;
+use crate::results::article::Article;
 
 /// Properties for the SnowballForm component.
 #[derive(Clone, PartialEq, Properties)]
@@ -26,42 +26,46 @@ struct SnowballParameters {
     output_max_size: String,
     depth: u8,
     input_id_list: Vec<String>,
-    search_for: common::SearchFor
+    search_for: common::SearchFor,
 }
 
 impl SnowballParameters {
     /// Creates new `SnowballParameters` from form input node references.
-    fn new(id_list_node: NodeRef,
-            depth_node: NodeRef,
-            output_max_size_node: NodeRef,
-            search_for_node: NodeRef) -> Result<Self, common::Error> {
-
+    fn new(
+        id_list_node: NodeRef,
+        depth_node: NodeRef,
+        output_max_size_node: NodeRef,
+        search_for_node: NodeRef,
+    ) -> Result<Self, common::Error> {
         let input_id_list = get_value(&id_list_node)
             .ok_or(common::NodeRefMissingValue::IdList)?
             .trim()
             .split(' ')
             .map(str::to_string)
             .collect::<Vec<String>>();
-        
-        let output_max_size = get_value(&output_max_size_node)
-            .ok_or(common::NodeRefMissingValue::OutputMaxSize)?;
+
+        let output_max_size =
+            get_value(&output_max_size_node).ok_or(common::NodeRefMissingValue::OutputMaxSize)?;
 
         let depth = get_value(&depth_node)
             .ok_or(common::NodeRefMissingValue::Depth)?
             .parse::<u8>()?;
-        
-        let search_for = match get_value(&search_for_node).ok_or(common::NodeRefMissingValue::SearchFor)?.as_str() {
-                "References" => SearchFor::References,
-                "Citations" => SearchFor::Citations,
-                "Both" => SearchFor::Both,
-                &_ => SearchFor::Both
-            };
+
+        let search_for = match get_value(&search_for_node)
+            .ok_or(common::NodeRefMissingValue::SearchFor)?
+            .as_str()
+        {
+            "References" => SearchFor::References,
+            "Citations" => SearchFor::Citations,
+            "Both" => SearchFor::Both,
+            &_ => SearchFor::Both,
+        };
 
         Ok(SnowballParameters {
             output_max_size,
             depth,
             input_id_list,
-            search_for
+            search_for,
         })
     }
 }
@@ -69,13 +73,16 @@ impl SnowballParameters {
 /// Sends the snowball search request to the backend API.
 /// Takes the form content as `SnowballParameters`.
 /// Returns a `Result` containing a shared reference to a vector of `Article` or an `Error`.
-async fn get_response(form_content: &SnowballParameters) -> Result<Rc<RefCell<Vec<Article>>>, Error> {
+async fn get_response(
+    form_content: &SnowballParameters,
+) -> Result<Rc<RefCell<Vec<Article>>>, Error> {
     use gloo_utils::document;
     let url = document().document_uri();
     let url = match url {
         Ok(href) => Ok(href),
-        Err(err) => Err(Error::JsValueString(err.as_string().unwrap_or_default()))
-    }?.replace('#', "");
+        Err(err) => Err(Error::JsValueString(err.as_string().unwrap_or_default())),
+    }?
+    .replace('#', "");
 
     let mut api_url = url::Url::parse(&url)?;
     api_url.set_fragment("".into());
@@ -86,15 +93,19 @@ async fn get_response(form_content: &SnowballParameters) -> Result<Rc<RefCell<Ve
         .header("Access-Control-Allow-Origin", "*")
         .body(serde_json::to_string(&form_content)?)?
         .send()
-        .await?
-        .text()
         .await?;
 
-    let value = serde_json::from_str::<serde_json::Value>(&response)?;
+    let result_text = response.text().await?;
+
+    if !response.ok() {
+        return Err(Error::Api(result_text));
+    }
+
+    let value = serde_json::from_str::<serde_json::Value>(&result_text)?;
     let mut articles = serde_json::from_value::<Vec<Article>>(value)?;
 
     articles.sort_by_key(|article| std::cmp::Reverse(article.score.unwrap_or_default()));
-    
+
     Ok(Rc::new(RefCell::new(articles)))
 }
 
@@ -104,14 +115,16 @@ fn id_list_prefill() -> Option<String> {
     let url = gloo_utils::document().document_uri();
     let url = match url {
         Ok(href) => Ok(href),
-        Err(err) => Err(Error::JsValueString(err.as_string().unwrap_or_default()))
-    }.ok()?;
+        Err(err) => Err(Error::JsValueString(err.as_string().unwrap_or_default())),
+    }
+    .ok()?;
 
-    let id_list_prefill = url::Url::parse(&url).ok()?
+    let id_list_prefill = url::Url::parse(&url)
+        .ok()?
         .query_pairs()
         .filter(|(k, _)| k.eq("id_list_prefill"))
-        .map(|(_,v)| v)
-        .fold(String::with_capacity(url.len()), |a, b| a+&b)
+        .map(|(_, v)| v)
+        .fold(String::with_capacity(url.len()), |a, b| a + &b)
         .replace(',', " ");
 
     Some(id_list_prefill)
@@ -126,7 +139,7 @@ pub fn SnowballForm(props: &FormProps) -> Html {
     let depth_node = use_node_ref();
     let output_max_size_node = use_node_ref();
     let search_for_node = use_node_ref();
-    
+
     let id_list = use_state(|| id_list_prefill().unwrap_or_default());
 
     let onchange = {
@@ -139,7 +152,7 @@ pub fn SnowballForm(props: &FormProps) -> Html {
             }
         })
     };
-    
+
     let onsubmit: Callback<SubmitEvent> = {
         let id_list_node = id_list_node.clone();
         let depth_node = depth_node.clone();
@@ -148,24 +161,26 @@ pub fn SnowballForm(props: &FormProps) -> Html {
         let on_submit_error = props.on_submit_error.clone();
         let on_receiving_response = props.on_receiving_response.clone();
         let on_requesting_results = props.on_requesting_results.clone();
-        
+
         Callback::from(move |event: SubmitEvent| {
             event.prevent_default();
             on_requesting_results.emit(());
-            
-            let form_content = SnowballParameters::new(id_list_node.clone(),
-                    depth_node.clone(),
-                    output_max_size_node.clone(),
-                    search_for_node.clone());
+
+            let form_content = SnowballParameters::new(
+                id_list_node.clone(),
+                depth_node.clone(),
+                output_max_size_node.clone(),
+                search_for_node.clone(),
+            );
 
             let form_content = match form_content {
                 Ok(form_content) => form_content,
                 Err(error) => {
                     on_submit_error.emit(error);
-                    return
+                    return;
                 }
             };
-            
+
             let on_receiving_response = on_receiving_response.clone();
             wasm_bindgen_futures::spawn_local(async move {
                 let response = get_response(&form_content).await;
@@ -173,7 +188,7 @@ pub fn SnowballForm(props: &FormProps) -> Html {
             });
         })
     };
-    
+
     html! {
         <form class="container-md" onsubmit={onsubmit} style={"margin-bottom: 50px;"}>
             <div class="mb-3 form-check">

@@ -1,5 +1,5 @@
-use std::{ops::Deref, cell::RefCell};
 use std::rc::Rc;
+use std::{cell::RefCell, ops::Deref};
 
 use yew::prelude::*;
 
@@ -19,7 +19,7 @@ mod form;
 use form::SnowballForm;
 
 mod common;
-use common::{Error, CurrentPage};
+use common::{CurrentPage, Error};
 
 /// The main application component.
 /// Manages the current page state and dark mode state.
@@ -28,15 +28,27 @@ fn app() -> Html {
     let current_page = use_state(|| CurrentPage::BibliZapApp);
     let dark_mode = use_state(|| false);
     match dark_mode.deref() {
-        true => gloo_utils::document_element().set_attribute("data-bs-theme", "dark").unwrap_or(()),
-        false => gloo_utils::document_element().set_attribute("data-bs-theme", "light").unwrap_or(())
+        true => gloo_utils::document_element()
+            .set_attribute("data-bs-theme", "dark")
+            .unwrap_or(()),
+        false => gloo_utils::document_element()
+            .set_attribute("data-bs-theme", "light")
+            .unwrap_or(()),
     }
-    
+
     let content = match current_page.deref() {
-        CurrentPage::BibliZapApp => { html!{<BibliZapApp/>} },
-        CurrentPage::HowItWorks => { html!{<HowItWorks/>} },
-        CurrentPage::LegalInformation => { html!{<LegalInformation/>} },
-        CurrentPage::Contact => { html!{<Contact/>} }
+        CurrentPage::BibliZapApp => {
+            html! {<BibliZapApp/>}
+        }
+        CurrentPage::HowItWorks => {
+            html! {<HowItWorks/>}
+        }
+        CurrentPage::LegalInformation => {
+            html! {<LegalInformation/>}
+        }
+        CurrentPage::Contact => {
+            html! {<Contact/>}
+        }
     };
     html! {
         <div>
@@ -45,7 +57,7 @@ fn app() -> Html {
             {content}
         </div>
     }
-}   
+}
 
 /// The main BibliZap application page component.
 /// Contains the search form and the results container.
@@ -53,7 +65,7 @@ fn app() -> Html {
 #[function_component(BibliZapApp)]
 fn app() -> Html {
     let results_status = use_state(|| ResultsStatus::NotRequested);
-    let on_receiving_response = { 
+    let on_receiving_response = {
         let results_status = results_status.clone();
         Callback::from(move |table: Result<Rc<RefCell<Vec<Article>>>, Error>| {
             match table {
@@ -69,7 +81,7 @@ fn app() -> Html {
         })
     };
 
-    let on_submit_error= {
+    let on_submit_error = {
         let results_status = results_status.clone();
         Callback::from(move |error: common::Error| {
             results_status.set(ResultsStatus::RequestError(error.to_string()))

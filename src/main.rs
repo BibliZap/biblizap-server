@@ -33,9 +33,9 @@ struct SnowballParameters {
 /// Custom error type for the server.
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("snowball error")]
+    #[error(transparent)]
     Biblizap(#[from] biblizap_rs::Error),
-    #[error("invalid parameters")]
+    #[error(transparent)]
     JsonError(#[from] serde_json::Error),
 }
 
@@ -72,7 +72,7 @@ async fn handle_request(req_body: &str, lens_api_key: &str) -> Result<String, Er
 /// Receives the request body, extracts parameters, performs the snowball search,
 /// and returns the results as JSON or an error response.
 async fn api(req_body: String, _: HttpRequest, config: web::Data<AppConfig>) -> impl Responder {
-    let snowball = handle_request(&req_body, &config.lens_api_key).await;
+    let snowball: Result<String, Error> = handle_request(&req_body, &config.lens_api_key).await;
 
     match snowball {
         Ok(snowball) => {
@@ -80,8 +80,8 @@ async fn api(req_body: String, _: HttpRequest, config: web::Data<AppConfig>) -> 
             HttpResponse::Ok().body(snowball)
         }
         Err(error) => {
-            log::error!("Request failed: {error:#?}");
-            HttpResponse::InternalServerError().body(format!("{error:#?}"))
+            log::error!("Request failed: {error:?}");
+            HttpResponse::InternalServerError().body(format!("{error}"))
         }
     }
 }
@@ -119,7 +119,7 @@ async fn main() -> std::io::Result<()> {
 
     let settings = builder.build().unwrap_or_else(|e| {
         log::warn!("failed to build config: {}", e);
-        conf::Config::builder().build().unwrap()
+        conf::Config::default()
     });
 
     let file_cfg: FileConfig = settings.try_deserialize().unwrap_or_default();

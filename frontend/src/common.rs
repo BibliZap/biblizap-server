@@ -6,6 +6,8 @@ use yew::prelude::*;
 /// Custom error type for the frontend application.
 #[derive(Error, Debug)]
 pub enum Error {
+    #[error("Api error: {0}")]
+    Api(String),
     #[error(transparent)]
     Json(#[from] serde_json::Error),
     #[error(transparent)]
@@ -31,7 +33,7 @@ pub enum Error {
     #[error(transparent)]
     UrlParse(#[from] url::ParseError),
     #[error("Unrecognized User Agent : {0}")]
-    UnrecognizedUserAgent(String)
+    UnrecognizedUserAgent(String),
 }
 
 /// Enum representing missing values from NodeRefs.
@@ -44,7 +46,7 @@ pub enum NodeRefMissingValue {
     #[error("Depth is missing")]
     Depth,
     #[error("SearchFor is missing")]
-    SearchFor
+    SearchFor,
 }
 
 impl From<JsValue> for Error {
@@ -59,7 +61,7 @@ pub enum CurrentPage {
     BibliZapApp,
     HowItWorks,
     Contact,
-    LegalInformation
+    LegalInformation,
 }
 
 /// Enum representing the direction of the snowball search.
@@ -68,7 +70,7 @@ pub enum SearchFor {
     References,
     Citations,
     #[default]
-    Both
+    Both,
 }
 
 /// Helper function to get the value from an HTML input element referenced by a NodeRef.
@@ -76,10 +78,9 @@ pub fn get_value(node_ref: &NodeRef) -> Option<String> {
     Some(node_ref.cast::<web_sys::HtmlInputElement>()?.value())
 }
 
-
 pub enum WebBrowser {
     Firefox,
-    Chrome
+    Chrome,
 }
 
 impl TryFrom<Navigator> for WebBrowser {
@@ -88,7 +89,7 @@ impl TryFrom<Navigator> for WebBrowser {
     /// Attempts to determine the web browser from the Navigator object.
     fn try_from(navigator: Navigator) -> Result<Self, Self::Error> {
         let user_agent: String = navigator.user_agent()?;
-        
+
         if user_agent.contains("Firefox") {
             return Ok(Self::Firefox);
         } else if user_agent.contains("Chrome") {
