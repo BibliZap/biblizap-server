@@ -1,4 +1,5 @@
-use actix_web::{web, App, HttpRequest, HttpResponse, HttpServer, Responder};
+use actix_web::{App, HttpRequest, HttpResponse, HttpServer, Responder, web};
+use actix_web_static_files::ResourceFiles;
 use biblizap_rs::SearchFor;
 use config as conf;
 use serde::Deserialize;
@@ -163,7 +164,7 @@ async fn main() -> std::io::Result<()> {
                     .app_data(config.clone())
                     .route(web::post().to(api)),
             )
-            .service(actix_web_static_files::ResourceFiles::new("/", generated))
+            .service(ResourceFiles::new("/", generated))
     })
     .bind((bind_address, port))?
     .run()
