@@ -1,6 +1,6 @@
 use actix_web::{App, HttpRequest, HttpResponse, HttpServer, Responder, web};
 use actix_web_static_files::ResourceFiles;
-use biblizap_rs::SearchFor;
+use biblizap_rs::{SearchFor, lens::cache::postgres::PostgresBackend};
 use config as conf;
 use serde::Deserialize;
 use std::env;
@@ -12,12 +12,14 @@ include!(concat!(env!("OUT_DIR"), "/generated.rs"));
 /// Application configuration holding necessary secrets/settings.
 struct AppConfig {
     lens_api_key: String,
+    cache_backend: PostgresBackend,
 }
 
 /// Configuration that can be loaded from `biblizap.toml`.
 #[derive(Debug, Deserialize, Default)]
 struct FileConfig {
     lens_api_key: Option<String>,
+    cache_backend_url: Option<String>,
     bind_address: Option<String>,
     port: Option<u16>,
 }
@@ -43,7 +45,11 @@ pub enum Error {
 /// Handles the core logic of performing the snowball search using biblizap-rs.
 /// Takes the request body (JSON string) and the Lens API key.
 /// Returns a JSON string representing the search results or an error.
-async fn handle_request(req_body: &str, lens_api_key: &str) -> Result<String, Error> {
+async fn handle_request(
+    req_body: &str,
+    lens_api_key: &str,
+    cache_backend: &PostgresBackend,
+) -> Result<String, Error> {
     let parameters = serde_json::from_str::<SnowballParameters>(req_body)?;
     log::info!("Received request: {:?}", parameters);
     let snowball = biblizap_rs::snowball(
@@ -56,6 +62,7 @@ async fn handle_request(req_body: &str, lens_api_key: &str) -> Result<String, Er
             .clamp(1, usize::MAX),
         &parameters.search_for,
         lens_api_key,
+        Some(cache_backend),
     )
     .await?;
 
@@ -73,7 +80,8 @@ async fn handle_request(req_body: &str, lens_api_key: &str) -> Result<String, Er
 /// Receives the request body, extracts parameters, performs the snowball search,
 /// and returns the results as JSON or an error response.
 async fn api(req_body: String, _: HttpRequest, config: web::Data<AppConfig>) -> impl Responder {
-    let snowball: Result<String, Error> = handle_request(&req_body, &config.lens_api_key).await;
+    let snowball: Result<String, Error> =
+        handle_request(&req_body, &config.lens_api_key, &config.cache_backend).await;
 
     match snowball {
         Ok(snowball) => {
@@ -151,7 +159,30 @@ async fn main() -> std::io::Result<()> {
             std::process::exit(1);
         });
 
-    let config = web::Data::new(AppConfig { lens_api_key });
+    let cache_backend_url = args
+        .cache_backend_url
+        .clone()
+        .or(file_cfg.cache_backend_url)
+        .or_else(|| env::var("BIBLIZAP_CACHE_BACKEND_URL").ok())
+        .unwrap_or_else(|| {
+            log::error!(
+                "Cache backend URL is required via CLI, config file, or BIBLIZAP_CACHE_BACKEND_URL env"
+            );
+            std::process::exit(1);
+        });
+
+    let cache_backend =
+        biblizap_rs::lens::cache::postgres::PostgresBackend::from_url(&cache_backend_url)
+            .await
+            .unwrap_or_else(|_| {
+                log::error!("Unable to connect to the cache database");
+                std::process::exit(1);
+            });
+
+    let config = web::Data::new(AppConfig {
+        lens_api_key,
+        cache_backend,
+    });
 
     log::info!("Listening on http://{}:{}", bind_address, port);
 
@@ -192,8 +223,9 @@ Values available in the config:
     - bind_address
     - port
     - lens_api_key
+    - cache_backend_url
 
-Secrets (Lens API key): prefer keeping `biblizap.toml` file mode 600, or set BIBLIZAP_LENS_API_KEY.
+Secrets (Lens API key and Cache URL): prefer keeping `biblizap.toml` file mode 600, or set BIBLIZAP_LENS_API_KEY.
 
 CLI flags override config and env."#),
 )]
@@ -201,6 +233,10 @@ struct Args {
     /// Your Lens.org API key (optional; can come from config or env)
     #[arg(short, long)]
     lens_api_key: Option<String>,
+
+    /// An URL to a working postgresql cache database (optional; can come from config or env)
+    #[arg(short, long)]
+    cache_backend_url: Option<String>,
 
     /// Address to bind the server (optional; overrides config)
     #[arg(short, long)]
