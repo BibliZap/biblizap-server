@@ -62,6 +62,7 @@ async fn handle_request(
             .clamp(1, usize::MAX),
         &parameters.search_for,
         lens_api_key,
+        None,
         Some(cache_backend),
     )
     .await?;
