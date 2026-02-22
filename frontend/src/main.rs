@@ -51,10 +51,12 @@ fn app() -> Html {
         }
     };
     html! {
-        <div>
+        <div class="d-flex flex-column min-vh-100">
             <NavBar current_page={current_page} dark_mode={dark_mode}/>
+            <div class="container my-4">
+                {content}
+            </div>
             <Wall/>
-            {content}
         </div>
     }
 }

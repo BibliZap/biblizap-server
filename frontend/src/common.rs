@@ -34,6 +34,12 @@ pub enum Error {
     UrlParse(#[from] url::ParseError),
     #[error("Unrecognized User Agent : {0}")]
     UnrecognizedUserAgent(String),
+    #[error("Invalid identifier format: '{0}' is neither a valid DOI nor PMID")]
+    InvalidIdFormat(String),
+    #[error("Too many identifiers: maximum 10 allowed, got {0}")]
+    TooManyIds(usize),
+    #[error("No valid identifiers provided")]
+    NoValidIds,
 }
 
 /// Enum representing missing values from NodeRefs.

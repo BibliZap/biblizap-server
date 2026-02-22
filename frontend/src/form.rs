@@ -4,10 +4,30 @@ use std::rc::Rc;
 use serde::Serialize;
 use yew::prelude::*;
 
-use crate::common::{self, get_value, SearchFor};
+use crate::common::{self, SearchFor, get_value};
 
 use crate::common::*;
 use crate::results::article::Article;
+
+/// Validates if a string is a valid DOI.
+/// DOIs start with "10." followed by at least 4 digits, a "/", and a suffix.
+fn is_valid_doi(s: &str) -> bool {
+    s.starts_with("10.") 
+        && s.len() > 7  // Minimum: "10.1234/x"
+        && s.contains('/') 
+        && s.chars().skip(3).take_while(|c| c.is_ascii_digit()).count() >= 4
+}
+
+/// Validates if a string is a valid PMID.
+/// PMIDs are purely numeric identifiers.
+fn is_valid_pmid(s: &str) -> bool {
+    !s.is_empty() && s.chars().all(|c| c.is_ascii_digit())
+}
+
+/// Validates if a string is either a valid DOI or PMID.
+fn is_valid_id(s: &str) -> bool {
+    is_valid_doi(s) || is_valid_pmid(s)
+}
 
 /// Properties for the SnowballForm component.
 #[derive(Clone, PartialEq, Properties)]
@@ -37,12 +57,33 @@ impl SnowballParameters {
         output_max_size_node: NodeRef,
         search_for_node: NodeRef,
     ) -> Result<Self, common::Error> {
-        let input_id_list = get_value(&id_list_node)
-            .ok_or(common::NodeRefMissingValue::IdList)?
+        let input_string = get_value(&id_list_node)
+            .ok_or(common::NodeRefMissingValue::IdList)?;
+        
+        let ids: Vec<String> = input_string
             .trim()
-            .split(' ')
-            .map(str::to_string)
-            .collect::<Vec<String>>();
+            .split_whitespace()
+            .map(|s| s.to_string())
+            .collect();
+        
+        // Check if there are more than 10 IDs
+        if ids.len() > 10 {
+            return Err(common::Error::TooManyIds(ids.len()));
+        }
+        
+        // Validate each ID is either a DOI or PMID
+        for id in &ids {
+            if !is_valid_id(id) {
+                return Err(common::Error::InvalidIdFormat(id.clone()));
+            }
+        }
+        
+        // Ensure at least one valid ID was provided
+        if ids.is_empty() {
+            return Err(common::Error::NoValidIds);
+        }
+        
+        let input_id_list = ids;
 
         let output_max_size =
             get_value(&output_max_size_node).ok_or(common::NodeRefMissingValue::OutputMaxSize)?;
@@ -192,18 +233,17 @@ pub fn SnowballForm(props: &FormProps) -> Html {
     html! {
         <form class="container-md" onsubmit={onsubmit} style={"margin-bottom: 50px;"}>
             <div class="mb-3 form-check">
-                <label for="idInput" class="form-label">{"Enter a list of PMIDs, DOIs or Lens IDs"}</label>
+                <label for="idInput" class="form-label">{"Enter a list of PMIDs or DOIs (maximum 10)"}</label>
                 <input type="text" class="form-control" id="idInput" {onchange} ref={id_list_node.clone()} value={id_list.to_string()}/>
-                <div id="idInputHelp" class="form-text">{"You can enter multiple references separated by spaces."}</div>
+                <div id="idInputHelp" class="form-text">{"You can enter up to 10 identifiers separated by spaces. Only DOIs (e.g., 10.1234/example) and PMIDs (e.g., 12345678) are accepted."}</div>
             </div>
-            <div class="mb-3 form-check">
+            <div class="mb-3 form-check visually-hidden">
                 <div class="row">
                 <div class="col">
                     <label class="form-check-label" for="depthSelect">{"Select depth"}</label>
                     <select class="form-select" aria-label="Default select example" id="depthSelect" value="2" ref={depth_node.clone()}>
                         <option value="1">{"1"}</option>
                         <option value="2" selected=true>{"2 (recommended)"}</option>
-                        <option value="3">{"3 (may lead to poor results and very long processing times)"}</option>
                     </select>
                     <div id="depthSelectHelp" class="form-text">{"The recommended depth value is 2"}</div>
                 </div>
@@ -218,7 +258,7 @@ pub fn SnowballForm(props: &FormProps) -> Html {
                 </div>
                 </div>
             </div>
-            <div class="mb-3 form-check">
+            <div class="mb-3 form-check visually-hidden">
                 <label class="form-check-label" for="searchForSelect">{"Search direction"}</label>
                 <select class="form-select" aria-label="Default select example" id="searchForSelect" ref={search_for_node.clone()}>
                     <option value="Both" selected=true>{"Both"}</option>

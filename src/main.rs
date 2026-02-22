@@ -40,6 +40,32 @@ pub enum Error {
     Biblizap(#[from] biblizap_rs::Error),
     #[error(transparent)]
     JsonError(#[from] serde_json::Error),
+    #[error("Invalid identifier format: '{0}' is neither a valid DOI nor PMID")]
+    InvalidIdFormat(String),
+    #[error("Too many identifiers: maximum 10 allowed, got {0}")]
+    TooManyIds(usize),
+    #[error("No valid identifiers provided")]
+    NoValidIds,
+}
+
+/// Validates if a string is a valid DOI.
+/// DOIs start with "10." followed by at least 4 digits, a "/", and a suffix.
+fn is_valid_doi(s: &str) -> bool {
+    s.starts_with("10.") 
+        && s.len() > 7  // Minimum: "10.1234/x"
+        && s.contains('/') 
+        && s.chars().skip(3).take_while(|c| c.is_ascii_digit()).count() >= 4
+}
+
+/// Validates if a string is a valid PMID.
+/// PMIDs are purely numeric identifiers.
+fn is_valid_pmid(s: &str) -> bool {
+    !s.is_empty() && s.chars().all(|c| c.is_ascii_digit())
+}
+
+/// Validates if a string is either a valid DOI or PMID.
+fn is_valid_id(s: &str) -> bool {
+    is_valid_doi(s) || is_valid_pmid(s)
 }
 
 /// Handles the core logic of performing the snowball search using biblizap-rs.
@@ -52,9 +78,26 @@ async fn handle_request(
 ) -> Result<String, Error> {
     let parameters = serde_json::from_str::<SnowballParameters>(req_body)?;
     log::info!("Received request: {:?}", parameters);
+    
+    // Server-side validation: check max 10 IDs
+    if parameters.input_id_list.len() > 10 {
+        return Err(Error::TooManyIds(parameters.input_id_list.len()));
+    }
+    
+    // Server-side validation: ensure at least one ID
+    if parameters.input_id_list.is_empty() {
+        return Err(Error::NoValidIds);
+    }
+    
+    // Server-side validation: check each ID is valid DOI or PMID
+    for id in &parameters.input_id_list {
+        if !is_valid_id(id) {
+            return Err(Error::InvalidIdFormat(id.clone()));
+        }
+    }
     let snowball = biblizap_rs::snowball(
         &parameters.input_id_list,
-        parameters.depth.clamp(1, 3),
+        parameters.depth.clamp(1, 2),
         parameters
             .output_max_size
             .parse::<usize>()
@@ -91,7 +134,13 @@ async fn api(req_body: String, _: HttpRequest, config: web::Data<AppConfig>) -> 
         }
         Err(error) => {
             log::error!("Request failed: {error:?}");
-            HttpResponse::InternalServerError().body(format!("{error}"))
+            // Return 400 Bad Request for validation errors, 500 for others
+            match error {
+                Error::InvalidIdFormat(_) | Error::TooManyIds(_) | Error::NoValidIds => {
+                    HttpResponse::BadRequest().body(format!("{error}"))
+                }
+                _ => HttpResponse::InternalServerError().body(format!("{error}")),
+            }
         }
     }
 }

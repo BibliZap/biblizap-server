@@ -1,17 +1,23 @@
 use yew::prelude::*;
 
-/// Component for the main title and logo section ("the wall").
+/// Component for the footer section.
 #[function_component]
 pub fn Wall() -> Html {
     html! {
-        <div class="container text-center my-5">
-            <h1 class="main-title">
-                <img src="/icons/biblizap-snowball-round-fill.svg" id="logo" alt="" width="300vw" style="margin-bottom: 50px"/>
-                {"BibliZap"}
-            </h1>
-            <h5 class="text-end">{"Citation searching made easy"}</h5>
-            <h5 class="text-end">{"Powered by "}<a href="https://www.lens.org/">{"the Lens"}</a></h5>
-            <h5 class="text-end">{"Trusted by the Faculty of Medecine of Lille"}</h5>
-        </div>
+        <footer class="footer mt-auto py-3 bg-body-tertiary">
+            <div class="container">
+                <div class="row">
+                    <div class="col-md-6 text-center text-md-start mb-2 mb-md-0">
+                        <img src="/icons/biblizap-snowball-round-fill.svg" alt="BibliZap" width="30" height="30" class="me-2" style="vertical-align: middle;"/>
+                        <strong>{"BibliZap"}</strong>
+                        <span class="text-muted ms-2">{"Citation searching made easy"}</span>
+                    </div>
+                    <div class="col-md-6 text-center text-md-end">
+                        <span class="text-muted">{"Powered by "}<a href="https://www.lens.org/" class="text-decoration-none">{"the Lens"}</a></span>
+                        <span class="text-muted ms-3">{"Trusted by the Faculty of Medicine of Lille"}</span>
+                    </div>
+                </div>
+            </div>
+        </footer>
     }
 }
