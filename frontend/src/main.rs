@@ -90,10 +90,26 @@ fn app() -> Html {
         })
     };
 
+    let form_class = match results_status.deref() {
+        ResultsStatus::NotRequested => "form-container-centered",
+        ResultsStatus::RequestError(_) => "form-container-centered",
+        _ => "form-container-top",
+    };
+
+    let results_class = match results_status.deref() {
+        ResultsStatus::NotRequested => "",
+        ResultsStatus::RequestError(_) => "",
+        _ => "results-fade-in",
+    };
+
     html! {
         <div>
-            <SnowballForm {on_submit_error} {on_requesting_results} {on_receiving_response}/>
-            <ResultsContainer results_status={results_status.clone()}/>
+            <div class={form_class}>
+                <SnowballForm {on_submit_error} {on_requesting_results} {on_receiving_response}/>
+            </div>
+            <div class={results_class}>
+                <ResultsContainer results_status={results_status.clone()}/>
+            </div>
         </div>
     }
 }

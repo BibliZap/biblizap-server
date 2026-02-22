@@ -231,10 +231,16 @@ pub fn SnowballForm(props: &FormProps) -> Html {
     };
 
     html! {
-        <form class="container-md" onsubmit={onsubmit} style={"margin-bottom: 50px;"}>
-            <div class="mb-3 form-check">
+        <form class="container-md" onsubmit={onsubmit} style={"margin-bottom: 50px; max-width: 800px;"}>
+            <div class="mb-3">
                 <label for="idInput" class="form-label">{"Enter a list of PMIDs or DOIs (maximum 10)"}</label>
-                <input type="text" class="form-control" id="idInput" {onchange} ref={id_list_node.clone()} value={id_list.to_string()}/>
+                <div class="input-group input-group-lg">
+                    <input type="text" class="form-control" id="idInput" placeholder="e.g., 12345678 10.1234/example" {onchange} ref={id_list_node.clone()} value={id_list.to_string()}/>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-search"></i>
+                        {" Search"}
+                    </button>
+                </div>
                 <div id="idInputHelp" class="form-text">{"You can enter up to 10 identifiers separated by spaces. Only DOIs (e.g., 10.1234/example) and PMIDs (e.g., 12345678) are accepted."}</div>
             </div>
             <div class="mb-3 form-check visually-hidden">
@@ -266,9 +272,6 @@ pub fn SnowballForm(props: &FormProps) -> Html {
                     <option value="References">{"References"}</option>
                 </select>
                 <div id="searchForSelectHelp" class="form-text">{"For most cases, we recommend Both"}</div>
-            </div>
-            <div class="text-center">
-                <button type="submit" class="btn btn-outline-secondary btn-lg">{"Search for related articles"}</button>
             </div>
         </form>
     }
