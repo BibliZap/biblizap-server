@@ -5,6 +5,7 @@ use actix_web::{
 };
 use crate::AppConfig;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -178,17 +179,41 @@ pub async fn link_handler(
 }
 
 /// Logs a successful search event asynchronously.
-pub fn log_search_success(bbz_sid: Uuid, article_count: usize, pool: sqlx::PgPool) {
+pub fn log_search_success(
+    bbz_sid: Uuid,
+    article_count: usize,
+    request_started_ms: i64,
+    request_completed_ms: i64,
+    request_duration_ms: i32,
+    request_inputs: Option<Value>,
+    pool: sqlx::PgPool,
+) {
     tokio::spawn(async move {
+        let metadata = serde_json::json!({
+            "request": request_inputs,
+            "result_count": article_count,
+        });
+
         let result = sqlx::query!(
             r#"
-            INSERT INTO bbz_events (bbz_sid, event_type, endpoint, metadata)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO bbz_events (
+                bbz_sid,
+                event_type,
+                endpoint,
+                request_started_ms,
+                request_completed_ms,
+                request_duration_ms,
+                metadata
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
             "#,
             bbz_sid,
             "search_success",
             "/api",
-            serde_json::json!({"result_count": article_count})
+            request_started_ms,
+            request_completed_ms,
+            request_duration_ms,
+            metadata
         )
         .execute(&pool)
         .await;
@@ -200,17 +225,41 @@ pub fn log_search_success(bbz_sid: Uuid, article_count: usize, pool: sqlx::PgPoo
 }
 
 /// Logs a search error event asynchronously.
-pub fn log_search_error(bbz_sid: Uuid, error_msg: String, pool: sqlx::PgPool) {
+pub fn log_search_error(
+    bbz_sid: Uuid,
+    error_msg: String,
+    request_started_ms: i64,
+    request_completed_ms: i64,
+    request_duration_ms: i32,
+    request_inputs: Option<Value>,
+    pool: sqlx::PgPool,
+) {
     tokio::spawn(async move {
+        let metadata = serde_json::json!({
+            "request": request_inputs,
+            "error": error_msg,
+        });
+
         let result = sqlx::query!(
             r#"
-            INSERT INTO bbz_events (bbz_sid, event_type, endpoint, metadata)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO bbz_events (
+                bbz_sid,
+                event_type,
+                endpoint,
+                request_started_ms,
+                request_completed_ms,
+                request_duration_ms,
+                metadata
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
             "#,
             bbz_sid,
             "search_error",
             "/api",
-            serde_json::json!({"error": error_msg})
+            request_started_ms,
+            request_completed_ms,
+            request_duration_ms,
+            metadata
         )
         .execute(&pool)
         .await;

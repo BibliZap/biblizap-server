@@ -4,6 +4,7 @@ use biblizap_rs::{SearchFor, lens::cache::postgres::PostgresBackend};
 use config as conf;
 use serde::Deserialize;
 use std::env;
+use std::time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -72,6 +73,13 @@ fn is_valid_id(s: &str) -> bool {
     is_valid_doi(s) || is_valid_pmid(s)
 }
 
+fn epoch_ms() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0)
+}
+
 /// Handles the core logic of performing the snowball search using biblizap-rs.
 /// Takes the request body (JSON string) and the Lens API key.
 /// Returns a JSON string representing the search results or an error.
@@ -128,8 +136,12 @@ async fn handle_request(
 /// Receives the request body, extracts parameters, performs the snowball search,
 /// and returns the results as JSON or an error response.
 async fn api(req_body: String, req: HttpRequest, config: web::Data<AppConfig>) -> impl Responder {
+    let request_started_ms = epoch_ms();
+    let request_inputs = serde_json::from_str::<serde_json::Value>(&req_body).ok();
     let snowball: Result<String, Error> =
         handle_request(&req_body, &config.lens_api_key, &config.cache_backend).await;
+    let request_completed_ms = epoch_ms();
+    let request_duration_ms = request_completed_ms.saturating_sub(request_started_ms) as i32;
 
     // Extract bbz_sid from cookie for event logging
     let bbz_sid = req
@@ -144,7 +156,15 @@ async fn api(req_body: String, req: HttpRequest, config: web::Data<AppConfig>) -
             if let Some(sid) = bbz_sid {
                 let pool = config.tracking_pool.clone();
                 let article_count = snowball.matches("\"doi\":").count();
-                tracking::log_search_success(sid, article_count, pool);
+                tracking::log_search_success(
+                    sid,
+                    article_count,
+                    request_started_ms,
+                    request_completed_ms,
+                    request_duration_ms,
+                    request_inputs.clone(),
+                    pool,
+                );
             }
             
             HttpResponse::Ok().body(snowball)
@@ -156,7 +176,15 @@ async fn api(req_body: String, req: HttpRequest, config: web::Data<AppConfig>) -
             if let Some(sid) = bbz_sid {
                 let pool = config.tracking_pool.clone();
                 let error_msg = error.to_string();
-                tracking::log_search_error(sid, error_msg, pool);
+                tracking::log_search_error(
+                    sid,
+                    error_msg,
+                    request_started_ms,
+                    request_completed_ms,
+                    request_duration_ms,
+                    request_inputs.clone(),
+                    pool,
+                );
             }
             
             // Return 400 Bad Request for validation errors, 500 for others
