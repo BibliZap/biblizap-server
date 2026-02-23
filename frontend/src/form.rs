@@ -231,8 +231,8 @@ pub fn SnowballForm(props: &FormProps) -> Html {
     };
 
     html! {
-        <form class="container-md" onsubmit={onsubmit} style={"margin-bottom: 50px; max-width: 800px;"}>
-            <div class="mb-3">
+        <form class="container-md" onsubmit={onsubmit}>
+            <div>
                 <label for="idInput" class="form-label">{"Enter a list of PMIDs or DOIs (maximum 10)"}</label>
                 <div class="input-group input-group-lg">
                     <input type="text" class="form-control" id="idInput" placeholder="e.g., 12345678 10.1234/example" {onchange} ref={id_list_node.clone()} value={id_list.to_string()}/>
