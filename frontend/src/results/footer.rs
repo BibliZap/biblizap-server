@@ -43,7 +43,7 @@ pub fn table_footer(props: &TableFooterProps) -> Html {
 
             <div class="col">
                 <div class="float-end">
-                    <ul class="pagination pagination-lg pagination-sm-mobile">
+                    <ul class="pagination pagination-sm-mobile">
                         if contiguous_low_bound != 0 {
                             <PageItem table_current_page={props.table_current_page.clone()} page_index={0}/>
                             if contiguous_low_bound > 1 {

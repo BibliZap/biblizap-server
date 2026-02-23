@@ -38,8 +38,8 @@
 }
 
 .results-fade-in {
-    animation: fadeIn 0.4s ease-in;
-    animation-delay: 0.6s;
+    animation: fadeIn 0.2s ease-in;
+    animation-delay: 0.2s;
     animation-fill-mode: both;
     opacity: 0;
 }
@@ -64,4 +64,46 @@
         padding: 0.25rem 0.5rem;
         font-size: 0.875rem;
     }
+}
+
+/* Sortable table headers */
+.sortable-header {
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.2s ease;
+}
+
+.sortable-header:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+.sortable-header strong {
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.sortable-header i {
+    font-size: 0.75rem;
+    opacity: 0.7;
+}
+
+[data-bs-theme="dark"] .sortable-header:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Make all table headers more compact */
+table thead th {
+    font-size: 0.85rem;
+    padding: 0.5rem;
+    vertical-align: middle;
+}
+
+table thead th strong {
+    font-weight: 600;
+}
+
+/* Make table body text more compact */
+table tbody td {
+    font-size: 0.9rem;
+    padding: 0.5rem;
 }

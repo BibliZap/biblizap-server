@@ -12,13 +12,60 @@ pub struct CardViewProps {
     pub articles: Vec<Article>,
     pub update_selected: Callback<(String, bool)>,
     pub selected_articles: Rc<RefCell<HashSet<String>>>,
+    pub articles_ref: Rc<RefCell<Vec<Article>>>,
+    pub redraw: Callback<()>,
 }
 
 /// Component for displaying articles as cards on mobile devices.
 #[function_component(CardView)]
 pub fn card_view(props: &CardViewProps) -> Html {
+    let sort_by_year_desc = {
+        let articles_ref = props.articles_ref.clone();
+        let redraw = props.redraw.clone();
+        Callback::from(move |_: MouseEvent| {
+            let mut articles = articles_ref.borrow_mut();
+            articles
+                .sort_by_key(|a| std::cmp::Reverse(a.year_published.clone().unwrap_or_default()));
+            redraw.emit(());
+        })
+    };
+
+    let sort_by_citations_desc = {
+        let articles_ref = props.articles_ref.clone();
+        let redraw = props.redraw.clone();
+        Callback::from(move |_: MouseEvent| {
+            let mut articles = articles_ref.borrow_mut();
+            articles.sort_by_key(|a| std::cmp::Reverse(a.citations.unwrap_or_default()));
+            redraw.emit(());
+        })
+    };
+
+    let sort_by_score_desc = {
+        let articles_ref = props.articles_ref.clone();
+        let redraw = props.redraw.clone();
+        Callback::from(move |_: MouseEvent| {
+            let mut articles = articles_ref.borrow_mut();
+            articles.sort_by_key(|a| std::cmp::Reverse(a.score.unwrap_or_default()));
+            redraw.emit(());
+        })
+    };
+
     html! {
         <div class="container-fluid">
+            // Sort buttons
+            <div class="mb-3 d-flex gap-2 flex-wrap">
+                <span class="fw-bold align-self-center">{"Sort by:"}</span>
+                <button class="btn btn-outline-secondary btn-sm" onclick={sort_by_year_desc}>
+                    <i class="bi bi-calendar"></i> {" Year"}
+                </button>
+                <button class="btn btn-outline-secondary btn-sm" onclick={sort_by_citations_desc}>
+                    <i class="bi bi-quote"></i> {" Citations"}
+                </button>
+                <button class="btn btn-outline-secondary btn-sm" onclick={sort_by_score_desc}>
+                    <i class="bi bi-star"></i> {" Score"}
+                </button>
+            </div>
+
             <div class="row g-3">
                 {props.articles.iter().map(|article| {
                     html! {

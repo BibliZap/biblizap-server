@@ -23,6 +23,32 @@ use row::*;
 mod card;
 use card::CardView;
 
+/// Enum representing the sort state of a column.
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum SortState {
+    None,
+    Ascending,
+    Descending,
+}
+
+impl SortState {
+    fn next(&self) -> Self {
+        match self {
+            SortState::None => SortState::Ascending,
+            SortState::Ascending => SortState::Descending,
+            SortState::Descending => SortState::None,
+        }
+    }
+
+    fn icon(&self) -> &'static str {
+        match self {
+            SortState::None => "bi-chevron-expand",
+            SortState::Ascending => "bi-chevron-up",
+            SortState::Descending => "bi-chevron-down",
+        }
+    }
+}
+
 /// Enum representing the status of the search results.
 #[derive(Clone, PartialEq)]
 pub enum ResultsStatus {
@@ -102,6 +128,11 @@ pub fn results(props: &TableProps) -> Html {
     let global_filter = use_state(|| "".to_string());
     let filters = use_mut_ref(Filters::default);
     let filters = use_state(|| filters);
+
+    // Track sort state for each sortable column
+    let sort_year = use_state(|| SortState::None);
+    let sort_citations = use_state(|| SortState::None);
+    let sort_score = use_state(|| SortState::None);
 
     let articles_to_display = articles
         .deref()
@@ -233,13 +264,13 @@ pub fn results(props: &TableProps) -> Html {
                     <tr>
                         <th style="width:2%"></th>
                         <HeaderCellDoi articles={articles.clone()} redraw_table={redraw_table.clone()} style=""/>
-                        <HeaderCellTitle articles={articles.clone()} redraw_table={redraw_table.clone()} style="width:15%"/>
+                        <HeaderCellTitle articles={articles.clone()} redraw_table={redraw_table.clone()} style="width:20%"/>
                         <HeaderCellJournal articles={articles.clone()} redraw_table={redraw_table.clone()} style=""/>
                         <HeaderCellFirstAuthor articles={articles.clone()} redraw_table={redraw_table.clone()} style=""/>
-                        <HeaderCellYearPublished articles={articles.clone()} redraw_table={redraw_table.clone()} style=""/>
-                        <HeaderCellSummary articles={articles.clone()} redraw_table={redraw_table.clone()} style="width:50%"/>
-                        <HeaderCellCitations articles={articles.clone()} redraw_table={redraw_table.clone()} style=""/>
-                        <HeaderCellScore articles={articles.clone()} redraw_table={redraw_table.clone()} style=""/>
+                        <HeaderCellYearPublished articles={articles.clone()} redraw_table={redraw_table.clone()} style="" sort_state={Some(sort_year.clone())}/>
+                        <HeaderCellSummary articles={articles.clone()} redraw_table={redraw_table.clone()} style="width:30%"/>
+                        <HeaderCellCitations articles={articles.clone()} redraw_table={redraw_table.clone()} style="" sort_state={Some(sort_citations.clone())}/>
+                        <HeaderCellScore articles={articles.clone()} redraw_table={redraw_table.clone()} style="" sort_state={Some(sort_score.clone())}/>
                     </tr>
                 </thead>
                 <thead>
@@ -268,6 +299,8 @@ pub fn results(props: &TableProps) -> Html {
                     articles={articles_slice.to_vec()}
                     update_selected={update_selected.clone()}
                     selected_articles={(*selected_articles).clone()}
+                    articles_ref={articles.clone()}
+                    redraw={redraw_table.clone()}
                 />
                 <TableFooter article_total_number={articles_to_display.len()} articles_per_page={articles_per_page.clone()} table_current_page={table_current_page.clone()}/>
             </div>
@@ -293,6 +326,8 @@ struct HeaderCellProps {
     articles: Rc<RefCell<Vec<Article>>>,
     redraw_table: Callback<()>,
     style: AttrValue,
+    #[prop_or(None)]
+    sort_state: Option<UseStateHandle<SortState>>,
 }
 
 /// Properties for table header cells that support filtering.
@@ -303,38 +338,17 @@ struct HeaderCellSearchProps {
 }
 
 use paste::paste;
-/// Macro to generate header cell components for sorting and filtering.
-macro_rules! header_cell {
+
+/// Macro to generate header cell components without sorting (label only).
+macro_rules! header_cell_no_sort {
     ($field:ident) => {
         paste! {
-            /// Table header cell for the '[<$field:snake>]' field, supporting sorting.
+            /// Table header cell for the '[<$field:snake>]' field, without sorting.
             #[function_component]
             fn [<HeaderCell $field:camel>](props: &HeaderCellProps) -> Html {
-                let sort_reverse = {
-                    let articles = props.articles.clone();
-                    let redraw_table = props.redraw_table.clone();
-                    Callback::from(move |_: MouseEvent| {
-                        let mut ref_vec = articles.deref().borrow_mut();
-                        ref_vec.deref_mut().sort_by_key(|a| std::cmp::Reverse(a.$field.clone().unwrap_or_default()));
-                        redraw_table.emit(());
-                    })
-                };
-                let sort = {
-                    let articles = props.articles.clone();
-                    let redraw_table = props.redraw_table.clone();
-                    Callback::from(move |_: MouseEvent| {
-                        let mut ref_vec = articles.deref().borrow_mut();
-                        ref_vec.deref_mut().sort_by_key(|a| a.$field.clone().unwrap_or_default());
-                        redraw_table.emit(());
-                    })
-                };
-
                 html! {
-                    <th class="text-start hover-overlay" style={props.style.clone()}>
-                        <div class="row"><strong>{inflections::case::to_title_case(&stringify!{[<$field:snake>]})}</strong></div>
-                        <button class="btn btn-outline-secondary col" onclick={sort_reverse}><i class="bi bi-sort-up"></i></button>
-                        <button class="btn btn-outline-secondary col" onclick={sort}><i class="bi bi-sort-down"></i></button>
-
+                    <th class="text-start" style={props.style.clone()}>
+                        <strong>{inflections::case::to_title_case(&stringify!{[<$field:snake>]})}</strong>
                     </th>
                 }
             }
@@ -363,13 +377,90 @@ macro_rules! header_cell {
     }
 }
 
-header_cell!(doi);
-header_cell!(title);
-header_cell!(summary);
-header_cell!(journal);
-header_cell!(citations);
-header_cell!(first_author);
+/// Macro to generate header cell components for sorting and filtering.
+macro_rules! header_cell {
+    ($field:ident) => {
+        paste! {
+            /// Table header cell for the '[<$field:snake>]' field, supporting sorting.
+            #[function_component]
+            fn [<HeaderCell $field:camel>](props: &HeaderCellProps) -> Html {
+                let onclick = if let Some(sort_state) = &props.sort_state {
+                    let articles = props.articles.clone();
+                    let redraw_table = props.redraw_table.clone();
+                    let sort_state = sort_state.clone();
+
+                    Some(Callback::from(move |_: MouseEvent| {
+                        let new_state = (*sort_state).next();
+                        sort_state.set(new_state);
+
+                        let mut ref_vec = articles.deref().borrow_mut();
+                        match new_state {
+                            SortState::None => {
+                                // Return to original order (by score desc)
+                                ref_vec.deref_mut().sort_by_key(|a| std::cmp::Reverse(a.score.clone().unwrap_or_default()));
+                            },
+                            SortState::Ascending => {
+                                ref_vec.deref_mut().sort_by_key(|a| a.$field.clone().unwrap_or_default());
+                            },
+                            SortState::Descending => {
+                                ref_vec.deref_mut().sort_by_key(|a| std::cmp::Reverse(a.$field.clone().unwrap_or_default()));
+                            },
+                        }
+                        redraw_table.emit(());
+                    }))
+                } else {
+                    None
+                };
+
+                let sort_icon = props.sort_state.as_ref().map(|s| (**s).icon()).unwrap_or("");
+                let classes = if props.sort_state.is_some() { "sortable-header" } else { "" };
+
+                html! {
+                    <th class={classes!("text-start", classes)} style={props.style.clone()} onclick={onclick}>
+                        <div class="d-flex align-items-center gap-1">
+                            <strong>{inflections::case::to_title_case(&stringify!{[<$field:snake>]})}</strong>
+                            if !sort_icon.is_empty() {
+                                <i class={classes!("bi", sort_icon)}></i>
+                            }
+                        </div>
+                    </th>
+                }
+            }
+
+            /// Table header cell for the '[<$field:snake>]' field, supporting filtering.
+            #[function_component]
+            fn [<HeaderCellSearch $field:camel>](props: &HeaderCellSearchProps) -> Html {
+                let input_node_ref = use_node_ref();
+                let oninput = {
+                    let filters = props.filters.clone();
+                    let input_node_ref = input_node_ref.clone();
+                    let redraw_table = props.redraw_table.clone();
+                    Callback::from(move |_: InputEvent| {
+                        let rc = filters.deref().to_owned();
+                        let value = input_node_ref.cast::<web_sys::HtmlInputElement>().unwrap().value();
+                        rc.deref().borrow_mut().$field = value.as_str().into();
+                        redraw_table.emit(())
+                    })
+                };
+
+                html! {
+                    <th><div class="form-check ps-0"><input type="text" class="form-control" oninput={oninput} ref={input_node_ref}/></div></th>
+                }
+            }
+        }
+    }
+}
+
+// Headers without sorting
+header_cell_no_sort!(doi);
+header_cell_no_sort!(title);
+header_cell_no_sort!(summary);
+header_cell_no_sort!(journal);
+header_cell_no_sort!(first_author);
+
+// Headers with sorting
 header_cell!(year_published);
+header_cell!(citations);
 header_cell!(score);
 
 /// Properties for the TableGlobalSearch component.
@@ -396,9 +487,9 @@ fn table_global_filter(props: &TableGlobalSearchProps) -> Html {
 
     html! {
         <div class="row justify-content-end">
-            <div class="mb-3 form-check col" style="max-width: 20%">
-                <label class="form-label">{"Search all fields"}</label>
-                <input type="text" class="form-control" oninput={oninput} ref={input_node_ref}/>
+            <div class="mb-3 form-check col-12 col-md-4 col-lg-3">
+                <label class="form-label"><strong>{"Search all fields"}</strong></label>
+                <input type="text" class="form-control form-control-lg" oninput={oninput} ref={input_node_ref}/>
             </div>
         </div>
     }
