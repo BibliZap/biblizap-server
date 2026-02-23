@@ -1,15 +1,15 @@
 use std::ops::Deref;
 
 use wasm_bindgen::JsCast;
-use yew::prelude::*;
 use web_sys::HtmlElement;
+use yew::prelude::*;
 
 /// Properties for the TableFooter component.
 #[derive(Clone, PartialEq, Properties)]
 pub struct TableFooterProps {
     pub article_total_number: usize,
     pub articles_per_page: UseStateHandle<i32>,
-    pub table_current_page: UseStateHandle<i32>
+    pub table_current_page: UseStateHandle<i32>,
 }
 
 /// Component for the table footer, including pagination and articles per page dropdown.
@@ -22,24 +22,28 @@ pub fn table_footer(props: &TableFooterProps) -> Html {
 
     let total_page_number = (props.article_total_number as i32) / articles_per_page;
     let last_page_index = total_page_number - 1;
-    
+
     let contiguous_window_radius = 2;
-    let contiguous_low_bound = (table_current_page - contiguous_window_radius).clamp(0, total_page_number);
-    let contiguous_high_bound = (contiguous_low_bound + 2*contiguous_window_radius + 1).clamp(0, total_page_number);
-    let contiguous_low_bound = (contiguous_high_bound - 2*contiguous_window_radius - 1).clamp(0, total_page_number); //Recalculate in case high bound got clamped
+    let contiguous_low_bound =
+        (table_current_page - contiguous_window_radius).clamp(0, total_page_number);
+    let contiguous_high_bound =
+        (contiguous_low_bound + 2 * contiguous_window_radius + 1).clamp(0, total_page_number);
+    let contiguous_low_bound =
+        (contiguous_high_bound - 2 * contiguous_window_radius - 1).clamp(0, total_page_number); //Recalculate in case high bound got clamped
 
     let contiguous_range = contiguous_low_bound..contiguous_high_bound;
+
     html! {
         <div class="row py-2" id="table_footer">
             <div class="col">
                 <div role="status" aria-live="polite">{format!("Showing {} to {} of {} entries", first_article, std::cmp::min(last_article as usize, props.article_total_number), props.article_total_number)}</div>
-                <ArticlesPerPageDropdown articles_per_page={props.articles_per_page.clone()} table_current_page={props.table_current_page.clone()}/> 
+                <ArticlesPerPageDropdown articles_per_page={props.articles_per_page.clone()} table_current_page={props.table_current_page.clone()}/>
             </div>
-            
+
 
             <div class="col">
                 <div class="float-end">
-                    <ul class="pagination pagination-lg">
+                    <ul class="pagination pagination-lg pagination-sm-mobile">
                         if contiguous_low_bound != 0 {
                             <PageItem table_current_page={props.table_current_page.clone()} page_index={0}/>
                             if contiguous_low_bound > 1 {
@@ -48,11 +52,11 @@ pub fn table_footer(props: &TableFooterProps) -> Html {
                                 </li>
                             }
                         }
-                        
+
                         if contiguous_range.len() != 1 {
                             { contiguous_range.into_iter().map(|index| html!{<PageItem table_current_page={props.table_current_page.clone()} page_index={index}/>} ).collect::<Html>() }
                         }
-                        
+
                         if contiguous_high_bound != total_page_number {
                             if total_page_number-contiguous_low_bound > 1 {
                                 <li class="page-item disabled"><a aria-disabled="true" role="link" tabindex="-1" class="page-link">{"…"}</a></li>
@@ -70,7 +74,7 @@ pub fn table_footer(props: &TableFooterProps) -> Html {
 #[derive(Clone, PartialEq, Properties)]
 struct ArticlesPerPageDropdownProps {
     articles_per_page: UseStateHandle<i32>,
-    table_current_page: UseStateHandle<i32>
+    table_current_page: UseStateHandle<i32>,
 }
 /// Component for the dropdown to select the number of articles displayed per page.
 #[function_component(ArticlesPerPageDropdown)]
@@ -80,7 +84,7 @@ fn articles_per_page_dropdown(props: &ArticlesPerPageDropdownProps) -> Html {
             <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
                 {"Articles per page"}
             </button>
-    
+
             <ul class="dropdown-menu">
                 <ArticlesPerPageDropdownItem table_articles_per_page={props.articles_per_page.clone()} table_current_page={props.table_current_page.clone()} value=10/>
                 <ArticlesPerPageDropdownItem table_articles_per_page={props.articles_per_page.clone()} table_current_page={props.table_current_page.clone()} value=50/>
@@ -96,7 +100,7 @@ fn articles_per_page_dropdown(props: &ArticlesPerPageDropdownProps) -> Html {
 struct ArticlesPerPageDropdownItemProps {
     table_articles_per_page: UseStateHandle<i32>,
     table_current_page: UseStateHandle<i32>,
-    value: i32
+    value: i32,
 }
 
 /// Component for a single item in the articles per page dropdown.
@@ -129,7 +133,7 @@ fn articles_per_page_dropdown(props: &ArticlesPerPageDropdownItemProps) -> Html 
 #[derive(Clone, PartialEq, Properties)]
 struct PageItemProps {
     table_current_page: UseStateHandle<i32>,
-    page_index: i32
+    page_index: i32,
 }
 /// Component for a single page number button in the pagination control.
 #[function_component(PageItem)]
@@ -152,10 +156,10 @@ fn page_item(props: &PageItemProps) -> Html {
 
     let class = match *props.table_current_page.deref() == props.page_index {
         true => "page-item active",
-        false => "page-item"
+        false => "page-item",
     };
 
     html! {
-        <li class={class}><button class="page-link" {onclick}>{props.page_index+1}</button></li>
+        <li class={class}><button class="page-link " {onclick}>{props.page_index+1}</button></li>
     }
 }

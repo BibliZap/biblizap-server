@@ -20,6 +20,9 @@ use download::*;
 mod row;
 use row::*;
 
+mod card;
+use card::CardView;
+
 /// Enum representing the status of the search results.
 #[derive(Clone, PartialEq)]
 pub enum ResultsStatus {
@@ -222,6 +225,9 @@ pub fn results(props: &TableProps) -> Html {
         <div id="table" class="container-fluid">
             <hr/>
             <TableGlobalSearch filter={global_filter.clone()}/>
+
+            // Desktop view - Table
+            <div class="d-none d-md-block">
             <table class="table table-hover table-bordered" style="table-layout:fixed">
                 <thead>
                     <tr>
@@ -253,7 +259,18 @@ pub fn results(props: &TableProps) -> Html {
                     { articles_slice.iter().map(|article| html!{<Row article={article.clone()} update_selected={update_selected.clone()} selected_articles={(*selected_articles).clone()}/>} ).collect::<Html>() }
                 </tbody>
             </table>
-            <TableFooter article_total_number={articles_to_display.len()} articles_per_page={articles_per_page} table_current_page={table_current_page}/>
+            <TableFooter article_total_number={articles_to_display.len()} articles_per_page={articles_per_page.clone()} table_current_page={table_current_page.clone()}/>
+            </div>
+
+            // Mobile view - Cards
+            <div class="d-block d-md-none">
+                <CardView
+                    articles={articles_slice.to_vec()}
+                    update_selected={update_selected.clone()}
+                    selected_articles={(*selected_articles).clone()}
+                />
+                <TableFooter article_total_number={articles_to_display.len()} articles_per_page={articles_per_page.clone()} table_current_page={table_current_page.clone()}/>
+            </div>
             <div style="display: flex; gap: 1rem; align-items: center;">
                 <h5>{
                     if selected_articles.borrow().is_empty() {

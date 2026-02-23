@@ -54,3 +54,14 @@
         transform: translateY(0);
     }
 }
+
+/* Responsive pagination sizing */
+@media (max-width: 767.98px) {
+    .pagination-sm-mobile {
+        font-size: 0.875rem;
+    }
+    .pagination-sm-mobile .page-link {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.875rem;
+    }
+}
