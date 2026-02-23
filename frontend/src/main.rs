@@ -1,6 +1,7 @@
 use std::rc::Rc;
 use std::{cell::RefCell, ops::Deref};
 
+use gloo_console::log;
 use yew::prelude::*;
 
 mod legal;
@@ -27,6 +28,23 @@ use common::{CurrentPage, Error};
 fn app() -> Html {
     let current_page = use_state(|| CurrentPage::BibliZapApp);
     let dark_mode = use_state(|| false);
+
+    // Handle Biblitest token on mount
+    {
+        let current_page = current_page.clone();
+        use_effect_with((), move |_| {
+            // Only process token on the main app page
+            if *current_page == CurrentPage::BibliZapApp {
+                wasm_bindgen_futures::spawn_local(async move {
+                    if let Err(e) = handle_biblitest_token().await {
+                        log!("Failed to process Biblitest token: {:?}", e.to_string());
+                    }
+                });
+            }
+            || ()
+        });
+    }
+
     match dark_mode.deref() {
         true => gloo_utils::document_element()
             .set_attribute("data-bs-theme", "dark")
@@ -59,6 +77,78 @@ fn app() -> Html {
             <Wall/>
         </div>
     }
+}
+
+/// Handles the Biblitest token from URL parameters.
+/// Reads the token, sends it to /link endpoint, and removes it from the URL.
+async fn handle_biblitest_token() -> Result<(), Error> {
+    use gloo_utils::document;
+
+    // Get current URL
+    let url_str = document()
+        .document_uri()
+        .map_err(|e| Error::JsValueString(e.as_string().unwrap_or_default()))?;
+
+    let url = url::Url::parse(&url_str)?;
+
+    // Look for biblitest_token parameter
+    let token = url
+        .query_pairs()
+        .find(|(k, _)| k == "biblitest_token")
+        .map(|(_, v)| v.to_string());
+
+    if let Some(token) = token {
+        log!("Found Biblitest token, linking session...");
+
+        // Send token to /link endpoint
+        let mut api_url = url.clone();
+        api_url.set_query(None);
+        api_url.set_fragment(None);
+        api_url.set_path("link");
+
+        let response = gloo_net::http::Request::post(api_url.as_str())
+            .json(&serde_json::json!({
+                "biblitest_token": token
+            }))?
+            .send()
+            .await?;
+
+        if response.ok() {
+            log!("Session linked successfully");
+
+            // Remove token from URL using history API
+            if let Some(window) = web_sys::window() {
+                if let Some(history) = window.history().ok() {
+                    let mut clean_url = url.clone();
+
+                    // Remove biblitest_token from query params
+                    let new_query: String = url
+                        .query_pairs()
+                        .filter(|(k, _)| k != "biblitest_token")
+                        .map(|(k, v)| format!("{}={}", k, v))
+                        .collect::<Vec<_>>()
+                        .join("&");
+
+                    if new_query.is_empty() {
+                        clean_url.set_query(None);
+                    } else {
+                        clean_url.set_query(Some(&new_query));
+                    }
+
+                    let _ = history.replace_state_with_url(
+                        &wasm_bindgen::JsValue::NULL,
+                        "",
+                        Some(clean_url.as_str()),
+                    );
+                }
+            }
+        } else {
+            let error_text = response.text().await?;
+            log!("Failed to link session: {}", error_text);
+        }
+    }
+
+    Ok(())
 }
 
 /// The main BibliZap application page component.

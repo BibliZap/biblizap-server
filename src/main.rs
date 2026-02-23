@@ -5,6 +5,9 @@ use config as conf;
 use serde::Deserialize;
 use std::env;
 use thiserror::Error;
+use uuid::Uuid;
+
+mod tracking;
 
 // Includes the generated code for static files (frontend build).
 include!(concat!(env!("OUT_DIR"), "/generated.rs"));
@@ -13,6 +16,7 @@ include!(concat!(env!("OUT_DIR"), "/generated.rs"));
 struct AppConfig {
     lens_api_key: String,
     cache_backend: PostgresBackend,
+    tracking_pool: sqlx::PgPool,
 }
 
 /// Configuration that can be loaded from `biblizap.toml`.
@@ -123,17 +127,38 @@ async fn handle_request(
 /// Actix-web handler for the `/api` endpoint.
 /// Receives the request body, extracts parameters, performs the snowball search,
 /// and returns the results as JSON or an error response.
-async fn api(req_body: String, _: HttpRequest, config: web::Data<AppConfig>) -> impl Responder {
+async fn api(req_body: String, req: HttpRequest, config: web::Data<AppConfig>) -> impl Responder {
     let snowball: Result<String, Error> =
         handle_request(&req_body, &config.lens_api_key, &config.cache_backend).await;
+
+    // Extract bbz_sid from cookie for event logging
+    let bbz_sid = req
+        .cookie("bbz_sid")
+        .and_then(|cookie| Uuid::parse_str(cookie.value()).ok());
 
     match snowball {
         Ok(snowball) => {
             log::info!("Request completed successfully");
+            
+            // Log event asynchronously (don't block response)
+            if let Some(sid) = bbz_sid {
+                let pool = config.tracking_pool.clone();
+                let article_count = snowball.matches("\"doi\":").count();
+                tracking::log_search_success(sid, article_count, pool);
+            }
+            
             HttpResponse::Ok().body(snowball)
         }
         Err(error) => {
             log::error!("Request failed: {error:?}");
+            
+            // Log error event asynchronously
+            if let Some(sid) = bbz_sid {
+                let pool = config.tracking_pool.clone();
+                let error_msg = error.to_string();
+                tracking::log_search_error(sid, error_msg, pool);
+            }
+            
             // Return 400 Bad Request for validation errors, 500 for others
             match error {
                 Error::InvalidIdFormat(_) | Error::TooManyIds(_) | Error::NoValidIds => {
@@ -145,12 +170,14 @@ async fn api(req_body: String, _: HttpRequest, config: web::Data<AppConfig>) -> 
     }
 }
 
+
 /// Main function to start the Actix-web server.
 /// Parses command-line arguments for the API key and port,
 /// loads the frontend static files, and serves the application.
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let args = Args::parse();
+    dotenvy::dotenv().ok(); // Load .env file if present
 
     // Initialize logging: prefer RUST_LOG if set, otherwise use the CLI-provided log level.
     let mut logger_builder = env_logger::Builder::from_env(env_logger::Env::default());
@@ -229,9 +256,29 @@ async fn main() -> std::io::Result<()> {
                 std::process::exit(1);
             });
 
+    let tracking_database_url = env::var("DATABASE_URL").unwrap_or_else(|_| {
+            log::error!(
+                "Tracking database URL is required via DATABASE_URL env"
+            );
+            std::process::exit(1);
+        });
+
+    // Create tracking database connection pool
+    let tracking_pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(5)
+        .connect(&tracking_database_url)
+        .await
+        .unwrap_or_else(|e| {
+            log::error!("Unable to connect to tracking database: {}", e);
+            std::process::exit(1);
+        });
+
+    log::info!("Connected to tracking database");
+
     let config = web::Data::new(AppConfig {
         lens_api_key,
         cache_backend,
+        tracking_pool,
     });
 
     log::info!("Listening on http://{}:{}", bind_address, port);
@@ -240,10 +287,14 @@ async fn main() -> std::io::Result<()> {
         let generated = generate();
 
         App::new()
+            .app_data(config.clone())
             .service(
                 web::resource("/api")
-                    .app_data(config.clone())
                     .route(web::post().to(api)),
+            )
+            .service(
+                web::resource("/link")
+                    .route(web::post().to(tracking::link_handler)),
             )
             .service(ResourceFiles::new("/", generated))
     })
