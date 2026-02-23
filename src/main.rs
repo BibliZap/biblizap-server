@@ -42,7 +42,7 @@ pub enum Error {
     JsonError(#[from] serde_json::Error),
     #[error("Invalid identifier format: '{0}' is neither a valid DOI nor PMID")]
     InvalidIdFormat(String),
-    #[error("Too many identifiers: maximum 10 allowed, got {0}")]
+    #[error("Too many identifiers: maximum 7 allowed, got {0}")]
     TooManyIds(usize),
     #[error("No valid identifiers provided")]
     NoValidIds,
@@ -79,8 +79,8 @@ async fn handle_request(
     let parameters = serde_json::from_str::<SnowballParameters>(req_body)?;
     log::info!("Received request: {:?}", parameters);
     
-    // Server-side validation: check max 10 IDs
-    if parameters.input_id_list.len() > 10 {
+    // Server-side validation: check max 7 IDs
+    if parameters.input_id_list.len() > 7 {
         return Err(Error::TooManyIds(parameters.input_id_list.len()));
     }
     

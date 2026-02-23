@@ -66,8 +66,8 @@ impl SnowballParameters {
             .map(|s| s.to_string())
             .collect();
         
-        // Check if there are more than 10 IDs
-        if ids.len() > 10 {
+        // Check if there are more than 7 IDs
+        if ids.len() > 7 {
             return Err(common::Error::TooManyIds(ids.len()));
         }
         
@@ -233,7 +233,7 @@ pub fn SnowballForm(props: &FormProps) -> Html {
     html! {
         <form class="container-md" onsubmit={onsubmit}>
             <div>
-                <label for="idInput" class="form-label">{"Enter a list of PMIDs or DOIs (maximum 10)"}</label>
+                <label for="idInput" class="form-label">{"Enter a list of PMIDs or DOIs (maximum 7)"}</label>
                 <div class="input-group input-group-lg">
                     <input type="text" class="form-control" id="idInput" placeholder="e.g., 12345678 10.1234/example" {onchange} ref={id_list_node.clone()} value={id_list.to_string()}/>
                     <button type="submit" class="btn btn-primary">
@@ -241,7 +241,7 @@ pub fn SnowballForm(props: &FormProps) -> Html {
                         {" Search"}
                     </button>
                 </div>
-                <div id="idInputHelp" class="form-text">{"You can enter up to 10 identifiers separated by spaces. Only DOIs (e.g., 10.1234/example) and PMIDs (e.g., 12345678) are accepted."}</div>
+                <div id="idInputHelp" class="form-text">{"You can enter up to 7 identifiers separated by spaces. Only DOIs (e.g., 10.1234/example) and PMIDs (e.g., 12345678) are accepted."}</div>
             </div>
             <div class="mb-3 form-check visually-hidden">
                 <div class="row">
