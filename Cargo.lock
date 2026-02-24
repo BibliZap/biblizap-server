@@ -509,8 +509,8 @@ checksum = "2af50177e190e07a26ab74f8b1efbfe2ef87da2116221318cb1c2e82baf7de06"
 
 [[package]]
 name = "biblizap-rs"
-version = "1.2.1"
-source = "git+https://github.com/BibliZap/biblizap-rs#f8d679ca50ff89ca1d8c31ade6b76b25772e188a"
+version = "1.2.2"
+source = "git+https://github.com/BibliZap/biblizap-rs#05ecd50295288b7e8478d20469041806ebf40ab1"
 dependencies = [
  "anyhow",
  "arrayvec",
@@ -1619,7 +1619,7 @@ dependencies = [
  "libc",
  "percent-encoding",
  "pin-project-lite",
- "socket2 0.6.2",
+ "socket2 0.5.10",
  "system-configuration",
  "tokio",
  "tower-service",
@@ -2389,7 +2389,7 @@ dependencies = [
  "quinn-udp",
  "rustc-hash",
  "rustls",
- "socket2 0.6.2",
+ "socket2 0.5.10",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
@@ -2427,7 +2427,7 @@ dependencies = [
  "cfg_aliases",
  "libc",
  "once_cell",
- "socket2 0.6.2",
+ "socket2 0.5.10",
  "tracing",
  "windows-sys 0.60.2",
 ]

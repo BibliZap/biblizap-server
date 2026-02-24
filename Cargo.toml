@@ -9,7 +9,7 @@ edition = "2024"
 actix-files = "0.6.10"
 actix-web = "4.13.0"
 actix-web-static-files = { version = "4.1", features = ["static-files-03"] }
-biblizap-rs = { git = "https://github.com/BibliZap/biblizap-rs", version = "1.2.1", features = [
+biblizap-rs = { git = "https://github.com/BibliZap/biblizap-rs", version = "1.2.2", features = [
     "cache-postgres",
 ] }
 clap = { version = "4.5.60", features = ["derive"] }
