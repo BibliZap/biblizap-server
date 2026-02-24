@@ -9,7 +9,7 @@ edition = "2024"
 actix-files = "0.6.10"
 actix-web = "4.13.0"
 actix-web-static-files = { version = "4.1", features = ["static-files-03"] }
-biblizap-rs = { git = "https://github.com/BibliZap/biblizap-rs", version = "1.1.3", features = [
+biblizap-rs = { git = "https://github.com/BibliZap/biblizap-rs", version = "1.2.1", features = [
     "cache-postgres",
 ] }
 clap = { version = "4.5.60", features = ["derive"] }
@@ -19,10 +19,16 @@ crc32fast = "1.4"
 dotenvy = "0.15.7"
 env_logger = "0.11.9"
 log = "0.4.29"
+num_cpus = "1.16"
 reqwest = "0.13.2"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
-sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "macros", "uuid"] }
+sqlx = { version = "0.8", features = [
+    "runtime-tokio",
+    "postgres",
+    "macros",
+    "uuid",
+] }
 static-files = "0.3.1"
 thiserror = "2.0.18"
 tokio = "1.49.0"

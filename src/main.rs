@@ -276,11 +276,28 @@ async fn main() -> std::io::Result<()> {
             std::process::exit(1);
         });
 
+    // For heavy IO workload with 4 workers per CPU
+    let worker_count = num_cpus::get() * 4;
+
+    // Create cache database connection pool with proper sizing for concurrent workers
+    // Each worker may need to query the cache, so we allocate 2 connections per worker
+    let cache_pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections((worker_count * 2) as u32)
+        .connect(&cache_backend_url)
+        .await
+        .unwrap_or_else(|e| {
+            log::error!("Unable to connect to the cache database: {}", e);
+            std::process::exit(1);
+        });
+
+    log::info!("Connected to cache database with {} max connections", worker_count * 2);
+
+    // Create PostgresBackend from pre-configured pool (runs migrations automatically)
     let cache_backend =
-        biblizap_rs::lens::cache::postgres::PostgresBackend::from_url(&cache_backend_url)
+        biblizap_rs::lens::cache::postgres::PostgresBackend::from_pool(cache_pool)
             .await
-            .unwrap_or_else(|_| {
-                log::error!("Unable to connect to the cache database");
+            .unwrap_or_else(|e| {
+                log::error!("Unable to initialize cache backend: {}", e);
                 std::process::exit(1);
             });
 
@@ -291,9 +308,9 @@ async fn main() -> std::io::Result<()> {
             std::process::exit(1);
         });
 
-    // Create tracking database connection pool
+    // Create tracking database connection pool with proper sizing for concurrent workers
     let tracking_pool = sqlx::postgres::PgPoolOptions::new()
-        .max_connections(5)
+        .max_connections((worker_count * 2) as u32)
         .connect(&tracking_database_url)
         .await
         .unwrap_or_else(|e| {
@@ -310,6 +327,7 @@ async fn main() -> std::io::Result<()> {
     });
 
     log::info!("Listening on http://{}:{}", bind_address, port);
+    log::info!("Running with {} workers (4x {} CPUs) for heavy IO workload", worker_count, num_cpus::get());
 
     HttpServer::new(move || {
         let generated = generate();
@@ -326,6 +344,7 @@ async fn main() -> std::io::Result<()> {
             )
             .service(ResourceFiles::new("/", generated))
     })
+    .workers(worker_count)
     .bind((bind_address, port))?
     .run()
     .await
