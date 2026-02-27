@@ -1,4 +1,4 @@
-use actix_web::{App, HttpRequest, HttpResponse, HttpServer, Responder, web};
+use actix_web::{App, HttpResponse, HttpServer, Responder, web};
 use actix_web_static_files::ResourceFiles;
 use biblizap_rs::{SearchFor, lens::cache::postgres::PostgresBackend};
 use config as conf;
@@ -6,7 +6,6 @@ use serde::Deserialize;
 use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
-use uuid::Uuid;
 
 mod tracking;
 
@@ -135,57 +134,41 @@ async fn handle_request(
 /// Actix-web handler for the `/api` endpoint.
 /// Receives the request body, extracts parameters, performs the snowball search,
 /// and returns the results as JSON or an error response.
-async fn api(req_body: String, req: HttpRequest, config: web::Data<AppConfig>) -> impl Responder {
+async fn api(req_body: String, config: web::Data<AppConfig>) -> impl Responder {
     let request_started_ms = epoch_ms();
     let request_inputs = serde_json::from_str::<serde_json::Value>(&req_body).ok();
     let snowball: Result<String, Error> =
         handle_request(&req_body, &config.lens_api_key, &config.cache_backend).await;
     let request_completed_ms = epoch_ms();
-    let request_duration_ms = request_completed_ms.saturating_sub(request_started_ms) as i32;
-
-    // Extract bbz_sid from cookie for event logging
-    let bbz_sid = req
-        .cookie("bbz_sid")
-        .and_then(|cookie| Uuid::parse_str(cookie.value()).ok());
 
     match snowball {
         Ok(snowball) => {
             log::info!("Request completed successfully");
             
-            // Log event asynchronously (don't block response)
-            if let Some(sid) = bbz_sid {
-                let pool = config.tracking_pool.clone();
+            let pool = config.tracking_pool.clone();
                 let article_count = snowball.matches("\"doi\":").count();
                 tracking::log_search_success(
-                    sid,
                     article_count,
                     request_started_ms,
                     request_completed_ms,
-                    request_duration_ms,
                     request_inputs.clone(),
                     pool,
                 );
-            }
             
             HttpResponse::Ok().body(snowball)
         }
         Err(error) => {
             log::error!("Request failed: {error:?}");
             
-            // Log error event asynchronously
-            if let Some(sid) = bbz_sid {
-                let pool = config.tracking_pool.clone();
+            let pool = config.tracking_pool.clone();
                 let error_msg = error.to_string();
                 tracking::log_search_error(
-                    sid,
                     error_msg,
                     request_started_ms,
                     request_completed_ms,
-                    request_duration_ms,
                     request_inputs.clone(),
                     pool,
                 );
-            }
             
             // Return 400 Bad Request for validation errors, 500 for others
             match error {
@@ -337,10 +320,6 @@ async fn main() -> std::io::Result<()> {
             .service(
                 web::resource("/api")
                     .route(web::post().to(api)),
-            )
-            .service(
-                web::resource("/link")
-                    .route(web::post().to(tracking::link_handler)),
             )
             .service(ResourceFiles::new("/", generated))
     })
