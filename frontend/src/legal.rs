@@ -23,12 +23,8 @@ pub fn legal_information() -> Html {
             </p>
             <h3>{"Privacy Policy"}</h3>
             <p class="p-3">
-                {"No personal information is collected on this website."}<br/><br/>
-                <strong>{"Session Tracking:"}</strong>{" For educational purposes, BibliZap may temporarily link sessions with the Biblitest platform during 2-hour student exercises. "}<br/>
-                {"This tracking is completely anonymous and uses session identifiers only (no personal data, no IP addresses, no user accounts). "}<br/>
-                {"Session cookies expire after 2 hours. Event data (search queries and result counts) is stored temporarily for analytics purposes and is not shared with third parties."}
+                {"No personal information is collected on this website."}
             </p>
-
             <h3>{"Intellectual Property"}</h3>
             <p class="p-3">
                 {"All intellectual property rights in and to the content and materials on this website are owned by us or our licensors."}<br/>
