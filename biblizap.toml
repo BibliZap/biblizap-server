@@ -1,5 +1,0 @@
-bind_address = "127.0.0.1"
-port = 35642
-lens_api_key = "ryPo855kHvK5UXQe0196nGhE9PNZKokdktkPcVMQOn3edGJGzN2x"
-cache_backend_url = "postgresql://biblizap:biblizap_local@localhost/biblizap_cache"
-pubmed_api_key = "a14e389a0e5df78ba716972882fa840cb308"
