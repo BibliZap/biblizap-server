@@ -18,10 +18,11 @@ mod download;
 use download::*;
 
 mod row;
-use row::*;
 
 mod card;
-use card::CardView;
+
+mod item;
+use item::Item;
 
 /// Enum representing the sort state of a column.
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -49,12 +50,15 @@ impl SortState {
     }
 }
 
+use crate::common::PubmedSearchResult;
+
 /// Enum representing the status of the search results.
 #[derive(Clone, PartialEq)]
 pub enum ResultsStatus {
     NotRequested,
     Requested,
     RequestError(String),
+    PubMedResults(Vec<PubmedSearchResult>),
     Available(Rc<RefCell<Vec<Article>>>),
 }
 
@@ -62,6 +66,7 @@ pub enum ResultsStatus {
 #[derive(Clone, PartialEq, Properties)]
 pub struct ResultsContainerProps {
     pub results_status: UseStateHandle<ResultsStatus>,
+    pub on_run_snowball: Callback<Vec<String>>,
 }
 /// Container component for displaying search results.
 /// Renders a spinner, error message, or the results table based on the `results_status`.
@@ -71,8 +76,12 @@ pub fn table_container(props: &ResultsContainerProps) -> Html {
         ResultsStatus::NotRequested => {
             html! {}
         }
+        ResultsStatus::PubMedResults(_) => {
+            // Rendered by the parent BibliZapApp component
+            html! {}
+        }
         ResultsStatus::Available(articles) => {
-            html! {<Results articles={articles}/>}
+            html! {<Results articles={articles} on_run_snowball={props.on_run_snowball.clone()}/>}
         }
         ResultsStatus::Requested => {
             html! {<Spinner/>}
@@ -103,10 +112,10 @@ pub fn spinner() -> Html {
 #[derive(Clone, PartialEq, Properties)]
 pub struct TableProps {
     articles: Rc<RefCell<Vec<Article>>>,
+    on_run_snowball: Callback<Vec<String>>,
 }
 
 /// Component for displaying the search results in a table.
-/// Includes global search, column sorting, column filtering, pagination, and download options.
 #[function_component(Results)]
 pub fn results(props: &TableProps) -> Html {
     let selected_articles = use_state(|| Rc::new(RefCell::new(HashSet::<String>::new())));
@@ -236,82 +245,193 @@ pub fn results(props: &TableProps) -> Html {
         })
     };
 
-    let articles_per_page = use_state(|| 10i32);
-    let table_current_page = use_state(|| 0i32);
+    let on_rerun_click = {
+        let get_articles = get_articles_to_download.clone();
+        let on_run_snowball = props.on_run_snowball.clone();
+        Callback::from(move |_: MouseEvent| {
+            let articles_to_download = get_articles();
+            let ids: Vec<String> = articles_to_download.iter().filter_map(|a| a.doi.clone()).collect();
+            on_run_snowball.emit(ids);
+        })
+    };
 
-    let first_article = (table_current_page.deref() * articles_per_page.deref())
-        .clamp(0, articles_to_display.len() as i32) as usize;
-    let last_article = (first_article as i32 + articles_per_page.deref())
-        .clamp(0, articles_to_display.len() as i32) as usize;
-    let articles_slice = &articles_to_display[first_article..last_article];
+    let on_copy_click = {
+        let get_articles = get_articles_to_download.clone();
+        Callback::from(move |_: MouseEvent| {
+            let articles = get_articles();
+            let mut ids: Vec<String> = articles.into_iter().filter_map(|a| a.doi).collect();
+            ids.sort();
+            ids.dedup();
+            let ids_str = ids.join("\n");
+            
+            wasm_bindgen_futures::spawn_local(async move {
+                let window = web_sys::window().expect("Window should exist");
+                let navigator = window.navigator();
+                let clipboard = navigator.clipboard();
+                
+                let promise = clipboard.write_text(&ids_str);
+                let _ = wasm_bindgen_futures::JsFuture::from(promise).await;
+            });
+        })
+    };
+
+    let display_limit = use_state(|| 20usize);
+
+    let articles_slice = &articles_to_display[0..std::cmp::min(*display_limit, articles_to_display.len())];
 
     let trigger_update = use_force_update();
     let redraw_table = {
+        let trigger_update = trigger_update.clone();
         Callback::from(move |_: ()| {
             trigger_update.force_update();
         })
     };
 
+    let on_load_more = {
+        let display_limit = display_limit.clone();
+        Callback::from(move |e: MouseEvent| {
+            e.prevent_default();
+            
+            // Blur the button to prevent the browser from automatically scrolling 
+            // down to keep the focused button in the viewport.
+            use wasm_bindgen::JsCast;
+            if let Some(target) = e.target() {
+                if let Ok(element) = target.dyn_into::<web_sys::HtmlElement>() {
+                    let _ = element.blur();
+                }
+            }
+            
+            display_limit.set(*display_limit + 20);
+        })
+    };
+
     html! {
-        <div id="table" class="container-fluid">
-            <hr/>
-            <TableGlobalSearch filter={global_filter.clone()}/>
-
-            // Desktop view - Table
-            <div class="d-none d-md-block">
-            <table class="table table-hover table-bordered" style="table-layout:fixed">
-                <thead>
-                    <tr>
-                        <th style="width:2%"></th>
-                        <HeaderCellDoi articles={articles.clone()} redraw_table={redraw_table.clone()} style=""/>
-                        <HeaderCellTitle articles={articles.clone()} redraw_table={redraw_table.clone()} style="width:20%"/>
-                        <HeaderCellJournal articles={articles.clone()} redraw_table={redraw_table.clone()} style=""/>
-                        <HeaderCellFirstAuthor articles={articles.clone()} redraw_table={redraw_table.clone()} style=""/>
-                        <HeaderCellYearPublished articles={articles.clone()} redraw_table={redraw_table.clone()} style="" sort_state={Some(sort_year.clone())}/>
-                        <HeaderCellSummary articles={articles.clone()} redraw_table={redraw_table.clone()} style="width:30%"/>
-                        <HeaderCellCitations articles={articles.clone()} redraw_table={redraw_table.clone()} style="" sort_state={Some(sort_citations.clone())}/>
-                        <HeaderCellScore articles={articles.clone()} redraw_table={redraw_table.clone()} style="" sort_state={Some(sort_score.clone())}/>
-                    </tr>
-                </thead>
-                <thead>
-                    <tr>
-                        <th></th>
-                        <HeaderCellSearchDoi filters={filters.clone()} redraw_table={redraw_table.clone()}/>
-                        <HeaderCellSearchTitle filters={filters.clone()} redraw_table={redraw_table.clone()}/>
-                        <HeaderCellSearchJournal filters={filters.clone()} redraw_table={redraw_table.clone()}/>
-                        <HeaderCellSearchFirstAuthor filters={filters.clone()} redraw_table={redraw_table.clone()}/>
-                        <HeaderCellSearchYearPublished filters={filters.clone()} redraw_table={redraw_table.clone()}/>
-                        <HeaderCellSearchSummary filters={filters.clone()} redraw_table={redraw_table.clone()}/>
-                        <HeaderCellSearchCitations filters={filters.clone()} redraw_table={redraw_table.clone()}/>
-                        <HeaderCellSearchScore filters={filters.clone()} redraw_table={redraw_table.clone()}/>
-                    </tr>
-                </thead>
-                <tbody class="table-group-divider">
-                    { articles_slice.iter().map(|article| html!{<Row article={article.clone()} update_selected={update_selected.clone()} selected_articles={(*selected_articles).clone()}/>} ).collect::<Html>() }
-                </tbody>
-            </table>
-            <TableFooter article_total_number={articles_to_display.len()} articles_per_page={articles_per_page.clone()} table_current_page={table_current_page.clone()}/>
+        <div id="table" class="container-fluid py-4">
+            <div class="row mb-4 align-items-center bg-light p-3 rounded border">
+                <div class="col-md-5 mb-3 mb-md-0">
+                    <div class="input-group">
+                        <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                        <input type="text" class="form-control" placeholder="Search across all fields..." oninput={
+                            let filter = global_filter.clone();
+                            let trigger_update = trigger_update.clone();
+                            Callback::from(move |e: InputEvent| {
+                                let input: web_sys::HtmlInputElement = e.target_unchecked_into();
+                                filter.set(input.value());
+                            })
+                        } />
+                    </div>
+                </div>
+                <div class="col-md-7 d-flex justify-content-md-end gap-2 flex-wrap">
+                    <span class="align-self-center fw-semibold text-secondary me-2">{"Sort by:"}</span>
+                    <button class={classes!("btn", "btn-sm", if *sort_year != SortState::None { "btn-primary" } else { "btn-outline-secondary" })} onclick={
+                        let articles = props.articles.clone();
+                        let redraw_table = redraw_table.clone();
+                        let sort_year = sort_year.clone();
+                        Callback::from(move |_: MouseEvent| {
+                            let new_state = (*sort_year).next();
+                            sort_year.set(new_state);
+                            let mut ref_vec = articles.deref().borrow_mut();
+                            match new_state {
+                                SortState::None => ref_vec.sort_by_key(|a| std::cmp::Reverse(a.score.clone().unwrap_or_default())),
+                                SortState::Ascending => ref_vec.sort_by_key(|a| a.year_published.clone().unwrap_or_default()),
+                                SortState::Descending => ref_vec.sort_by_key(|a| std::cmp::Reverse(a.year_published.clone().unwrap_or_default())),
+                            }
+                            redraw_table.emit(());
+                        })
+                    }>
+                        <i class="bi bi-calendar me-1"></i> {"Year"} {if *sort_year != SortState::None { html! {<i class={classes!("bi", sort_year.icon())}></i>} } else { html!{} }}
+                    </button>
+                    <button class={classes!("btn", "btn-sm", if *sort_citations != SortState::None { "btn-primary" } else { "btn-outline-secondary" })} onclick={
+                        let articles = props.articles.clone();
+                        let redraw_table = redraw_table.clone();
+                        let sort_citations = sort_citations.clone();
+                        Callback::from(move |_: MouseEvent| {
+                            let new_state = (*sort_citations).next();
+                            sort_citations.set(new_state);
+                            let mut ref_vec = articles.deref().borrow_mut();
+                            match new_state {
+                                SortState::None => ref_vec.sort_by_key(|a| std::cmp::Reverse(a.score.clone().unwrap_or_default())),
+                                SortState::Ascending => ref_vec.sort_by_key(|a| a.citations.clone().unwrap_or_default()),
+                                SortState::Descending => ref_vec.sort_by_key(|a| std::cmp::Reverse(a.citations.clone().unwrap_or_default())),
+                            }
+                            redraw_table.emit(());
+                        })
+                    }>
+                        <i class="bi bi-quote me-1"></i> {"Citations"} {if *sort_citations != SortState::None { html! {<i class={classes!("bi", sort_citations.icon())}></i>} } else { html!{} }}
+                    </button>
+                    <button class={classes!("btn", "btn-sm", if *sort_score != SortState::None { "btn-primary" } else { "btn-outline-secondary" })} onclick={
+                        let articles = props.articles.clone();
+                        let redraw_table = redraw_table.clone();
+                        let sort_score = sort_score.clone();
+                        Callback::from(move |_: MouseEvent| {
+                            let new_state = (*sort_score).next();
+                            sort_score.set(new_state);
+                            let mut ref_vec = articles.deref().borrow_mut();
+                            match new_state {
+                                SortState::None => ref_vec.sort_by_key(|a| std::cmp::Reverse(a.score.clone().unwrap_or_default())),
+                                SortState::Ascending => ref_vec.sort_by_key(|a| a.score.clone().unwrap_or_default()),
+                                SortState::Descending => ref_vec.sort_by_key(|a| std::cmp::Reverse(a.score.clone().unwrap_or_default())),
+                            }
+                            redraw_table.emit(());
+                        })
+                    }>
+                        <i class="bi bi-star-fill me-1"></i> {"Score"} {if *sort_score != SortState::None { html! {<i class={classes!("bi", sort_score.icon())}></i>} } else { html!{} }}
+                    </button>
+                </div>
             </div>
 
-            // Mobile view - Cards
-            <div class="d-block d-md-none">
-                <CardView
-                    articles={articles_slice.to_vec()}
-                    update_selected={update_selected.clone()}
-                    selected_articles={(*selected_articles).clone()}
-                    articles_ref={articles.clone()}
-                    redraw={redraw_table.clone()}
-                />
-                <TableFooter article_total_number={articles_to_display.len()} articles_per_page={articles_per_page.clone()} table_current_page={table_current_page.clone()}/>
+            // Modern List View
+            <div class="mb-4">
+                { articles_slice.iter().enumerate().map(|(i, article)| html!{
+                    <Item 
+                        key={article.doi.clone().unwrap_or_else(|| i.to_string())}
+                        article={article.clone()} 
+                        index={i}
+                        update_selected={update_selected.clone()} 
+                        selected_articles={(*selected_articles).clone()}
+                    />
+                } ).collect::<Html>() }
             </div>
-            <div style="display: flex; gap: 1rem; align-items: center;">
+
+            {if *display_limit < articles_to_display.len() {
+                html! {
+                    <div class="d-flex justify-content-center my-4">
+                        <button class="btn btn-outline-primary rounded-pill px-4 py-2 fw-semibold" onclick={on_load_more}>
+                            {"Load More Articles..."}
+                        </button>
+                    </div>
+                }
+            } else {
+                html! {
+                    <div class="text-center text-muted my-4 py-3 border-top">
+                        <small>{"All "}{articles_to_display.len()}{" articles displayed."}</small>
+                    </div>
+                }
+            }}
+
+            <div class="mt-5 p-3 bg-light border rounded d-flex gap-3 align-items-center flex-wrap shadow-sm">
                 <h5>{
                     if selected_articles.borrow().is_empty() {
-                        "Download everything as:".to_string()
+                        "Download all articles:".to_string()
                     } else {
-                        format!("Download {} selected articles as:", selected_articles.borrow().len())
+                        format!("Selected ({}) actions:", selected_articles.borrow().len())
                     }
                 }</h5>
+                {if !selected_articles.borrow().is_empty() {
+                    html! {
+                        <>
+                            <button class="btn btn-primary" onclick={on_rerun_click}>
+                                <i class="bi bi-search"></i> {" Rerun BibliZap"}
+                            </button>
+                            <button class="btn btn-outline-secondary" onclick={on_copy_click} title="Copy DOIs/PMIDs to clipboard">
+                                <i class="bi bi-clipboard"></i> {" Copy"}
+                            </button>
+                            <div class="vr mx-2"></div>
+                        </>
+                    }
+                } else {
+                    html! {}
+                }}
                 <DownloadButton onclick={on_excel_download_click} label="Excel"/>
                 <DownloadButton onclick={on_ris_download_click} label="RIS"/>
                 <DownloadButton onclick={on_bibtex_download_click} label="BibTeX"/>
@@ -320,180 +440,8 @@ pub fn results(props: &TableProps) -> Html {
     }
 }
 
-/// Properties for table header cells that support sorting.
-#[derive(Clone, PartialEq, Properties)]
-struct HeaderCellProps {
-    articles: Rc<RefCell<Vec<Article>>>,
-    redraw_table: Callback<()>,
-    style: AttrValue,
-    #[prop_or(None)]
-    sort_state: Option<UseStateHandle<SortState>>,
-}
-
-/// Properties for table header cells that support filtering.
-#[derive(Clone, PartialEq, Properties)]
-struct HeaderCellSearchProps {
-    filters: UseStateHandle<Rc<RefCell<Filters>>>,
-    redraw_table: Callback<()>,
-}
-
-use paste::paste;
-
-/// Macro to generate header cell components without sorting (label only).
-macro_rules! header_cell_no_sort {
-    ($field:ident) => {
-        paste! {
-            /// Table header cell for the '[<$field:snake>]' field, without sorting.
-            #[function_component]
-            fn [<HeaderCell $field:camel>](props: &HeaderCellProps) -> Html {
-                html! {
-                    <th class="text-start" style={props.style.clone()}>
-                        <strong>{inflections::case::to_title_case(&stringify!{[<$field:snake>]})}</strong>
-                    </th>
-                }
-            }
-
-            /// Table header cell for the '[<$field:snake>]' field, supporting filtering.
-            #[function_component]
-            fn [<HeaderCellSearch $field:camel>](props: &HeaderCellSearchProps) -> Html {
-                let input_node_ref = use_node_ref();
-                let oninput = {
-                    let filters = props.filters.clone();
-                    let input_node_ref = input_node_ref.clone();
-                    let redraw_table = props.redraw_table.clone();
-                    Callback::from(move |_: InputEvent| {
-                        let rc = filters.deref().to_owned();
-                        let value = input_node_ref.cast::<web_sys::HtmlInputElement>().unwrap().value();
-                        rc.deref().borrow_mut().$field = value.as_str().into();
-                        redraw_table.emit(())
-                    })
-                };
-
-                html! {
-                    <th><div class="form-check ps-0"><input type="text" class="form-control" oninput={oninput} ref={input_node_ref}/></div></th>
-                }
-            }
-        }
-    }
-}
-
-/// Macro to generate header cell components for sorting and filtering.
-macro_rules! header_cell {
-    ($field:ident) => {
-        paste! {
-            /// Table header cell for the '[<$field:snake>]' field, supporting sorting.
-            #[function_component]
-            fn [<HeaderCell $field:camel>](props: &HeaderCellProps) -> Html {
-                let onclick = if let Some(sort_state) = &props.sort_state {
-                    let articles = props.articles.clone();
-                    let redraw_table = props.redraw_table.clone();
-                    let sort_state = sort_state.clone();
-
-                    Some(Callback::from(move |_: MouseEvent| {
-                        let new_state = (*sort_state).next();
-                        sort_state.set(new_state);
-
-                        let mut ref_vec = articles.deref().borrow_mut();
-                        match new_state {
-                            SortState::None => {
-                                // Return to original order (by score desc)
-                                ref_vec.deref_mut().sort_by_key(|a| std::cmp::Reverse(a.score.clone().unwrap_or_default()));
-                            },
-                            SortState::Ascending => {
-                                ref_vec.deref_mut().sort_by_key(|a| a.$field.clone().unwrap_or_default());
-                            },
-                            SortState::Descending => {
-                                ref_vec.deref_mut().sort_by_key(|a| std::cmp::Reverse(a.$field.clone().unwrap_or_default()));
-                            },
-                        }
-                        redraw_table.emit(());
-                    }))
-                } else {
-                    None
-                };
-
-                let sort_icon = props.sort_state.as_ref().map(|s| (**s).icon()).unwrap_or("");
-                let classes = if props.sort_state.is_some() { "sortable-header" } else { "" };
-
-                html! {
-                    <th class={classes!("text-start", classes)} style={props.style.clone()} onclick={onclick}>
-                        <div class="d-flex align-items-center gap-1">
-                            <strong>{inflections::case::to_title_case(&stringify!{[<$field:snake>]})}</strong>
-                            if !sort_icon.is_empty() {
-                                <i class={classes!("bi", sort_icon)}></i>
-                            }
-                        </div>
-                    </th>
-                }
-            }
-
-            /// Table header cell for the '[<$field:snake>]' field, supporting filtering.
-            #[function_component]
-            fn [<HeaderCellSearch $field:camel>](props: &HeaderCellSearchProps) -> Html {
-                let input_node_ref = use_node_ref();
-                let oninput = {
-                    let filters = props.filters.clone();
-                    let input_node_ref = input_node_ref.clone();
-                    let redraw_table = props.redraw_table.clone();
-                    Callback::from(move |_: InputEvent| {
-                        let rc = filters.deref().to_owned();
-                        let value = input_node_ref.cast::<web_sys::HtmlInputElement>().unwrap().value();
-                        rc.deref().borrow_mut().$field = value.as_str().into();
-                        redraw_table.emit(())
-                    })
-                };
-
-                html! {
-                    <th><div class="form-check ps-0"><input type="text" class="form-control" oninput={oninput} ref={input_node_ref}/></div></th>
-                }
-            }
-        }
-    }
-}
-
-// Headers without sorting
-header_cell_no_sort!(doi);
-header_cell_no_sort!(title);
-header_cell_no_sort!(summary);
-header_cell_no_sort!(journal);
-header_cell_no_sort!(first_author);
-
-// Headers with sorting
-header_cell!(year_published);
-header_cell!(citations);
-header_cell!(score);
-
-/// Properties for the TableGlobalSearch component.
-#[derive(Clone, PartialEq, Properties)]
-pub struct TableGlobalSearchProps {
-    filter: UseStateHandle<String>,
-}
-
-/// Component for the global search input above the table.
-#[function_component(TableGlobalSearch)]
-fn table_global_filter(props: &TableGlobalSearchProps) -> Html {
-    let input_node_ref = use_node_ref();
-    let oninput = {
-        let filter = props.filter.clone();
-        let input_node_ref = input_node_ref.clone();
-        Callback::from(move |_: InputEvent| {
-            let value = input_node_ref
-                .cast::<web_sys::HtmlInputElement>()
-                .unwrap()
-                .value();
-            filter.set(value);
-        })
-    };
-
-    html! {
-        <div class="row justify-content-end">
-            <div class="mb-3 form-check col-12 col-md-4 col-lg-3">
-                <label class="form-label"><strong>{"Search all fields"}</strong></label>
-                <input type="text" class="form-control form-control-lg" oninput={oninput} ref={input_node_ref}/>
-            </div>
-        </div>
-    }
-}
+// The advanced headers are no longer implemented in the simple control bar,
+// but we leave Error handling component here.
 
 /// Properties for the Error component.
 #[derive(Clone, PartialEq, Properties)]

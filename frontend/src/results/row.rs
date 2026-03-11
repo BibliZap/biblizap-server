@@ -13,7 +13,7 @@ pub struct RowProps {
 /// Displays article information and a checkbox for selection.
 #[function_component(Row)]
 pub fn row(props: &RowProps) -> Html {
-    let summary_expanded = use_state(|| false);
+    let expanded = use_state(|| false);
 
     fn doi_link(doi: Option<String>) -> Option<String> {
         let doi = doi?;
@@ -31,6 +31,7 @@ pub fn row(props: &RowProps) -> Html {
         let update_selected = props.update_selected.clone();
         let doi = props.article.doi.clone();
         Callback::from(move |event: Event| {
+            event.stop_propagation();
             let update_selected = update_selected.clone();
             let doi = doi.clone();
             let checked = event
@@ -42,53 +43,67 @@ pub fn row(props: &RowProps) -> Html {
         })
     };
 
-    let toggle_summary = {
-        let summary_expanded = summary_expanded.clone();
+    let toggle_expanded = {
+        let expanded = expanded.clone();
         Callback::from(move |e: MouseEvent| {
             e.prevent_default();
-            summary_expanded.set(!*summary_expanded);
+            expanded.set(!*expanded);
         })
     };
 
-    let summary_cell = if let Some(summary) = &props.article.summary {
-        let is_long = summary.len() > 150;
-        if is_long && !*summary_expanded {
-            let truncated: String = summary.chars().take(150).collect();
-            html! {
-                <td style="word-wrap: break-word">
-                    {truncated}{"..."}
-                    <a href="#" onclick={toggle_summary.clone()} class="text-decoration-none small ms-1">
-                        {"more"}
-                    </a>
-                </td>
-            }
-        } else if is_long {
-            html! {
-                <td style="word-wrap: break-word">
-                    {summary}
-                    <a href="#" onclick={toggle_summary} class="text-decoration-none small ms-1">
-                        {"less"}
-                    </a>
-                </td>
-            }
-        } else {
-            html! { <td style="word-wrap: break-word">{summary}</td> }
-        }
-    } else {
-        html! { <td></td> }
-    };
-
     html! {
-        <tr>
-            <td><input type={"checkbox"} class={"row-checkbox"} checked={is_selected} onchange={onchange}/></td>
-            <td style=""><a href={doi_link(props.article.doi.clone())} style="word-wrap: break-word">{props.article.doi.clone().unwrap_or_default()}</a></td>
-            <td style="word-wrap: break-word">{props.article.title.clone().unwrap_or_default()}</td>
-            <td style="word-wrap: break-word">{props.article.journal.clone().unwrap_or_default()}</td>
-            <td>{props.article.first_author.clone().unwrap_or_default()}</td>
-            <td>{props.article.year_published.unwrap_or_default()}</td>
-            {summary_cell}
-            <td>{props.article.citations.unwrap_or_default()}</td>
-            <td>{props.article.score.unwrap_or_default()}</td>
-        </tr>
+        <>
+            <tr class="cursor-pointer" onclick={toggle_expanded} style="cursor: pointer; transition: background-color 0.15s ease-in-out;">
+                <td onclick={Callback::from(|e: MouseEvent| e.stop_propagation())} style="text-align: center; vertical-align: middle;">
+                    <input type={"checkbox"} class={"row-checkbox"} checked={is_selected} onchange={onchange}/>
+                </td>
+                <td class="fw-bold" style="word-wrap: break-word">
+                    {props.article.title.clone().unwrap_or_default()}
+                </td>
+                <td style="word-wrap: break-word">{props.article.journal.clone().unwrap_or_default()}</td>
+                <td>{props.article.first_author.clone().unwrap_or_default()}</td>
+                <td>{props.article.year_published.unwrap_or_default()}</td>
+                <td>{props.article.citations.unwrap_or_default()}</td>
+                <td>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span>{props.article.score.unwrap_or_default()}</span>
+                        <i class={classes!("bi", if *expanded { "bi-chevron-up" } else { "bi-chevron-down" })}></i>
+                    </div>
+                </td>
+            </tr>
+            {
+                if *expanded {
+                    html! {
+                        <tr class="table-light">
+                            <td colspan="7">
+                                <div class="px-4 py-3">
+                                    {if let Some(summary) = &props.article.summary {
+                                        html! { <p class="mb-3 text-secondary" style="font-size: 0.95em;"><strong>{"Abstract:"}</strong>{" "}{summary}</p> }
+                                    } else {
+                                        html! {}
+                                    }}
+                                    
+                                    <div class="d-flex gap-2">
+                                        {if let Some(doi) = &props.article.doi {
+                                            html! {
+                                                <a href={doi_link(Some(doi.clone()))} target="_blank" class="btn btn-sm btn-outline-primary">
+                                                    <i class="bi bi-box-arrow-up-right"></i> {" View on Publisher Site"}
+                                                </a>
+                                            }
+                                        } else {
+                                            html! {
+                                                <span class="text-muted small">{"No DOI available"}</span>
+                                            }
+                                        }}
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                } else {
+                    html! {}
+                }
+            }
+        </>
     }
 }
