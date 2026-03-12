@@ -64,10 +64,10 @@ pub struct PubmedResultsProps {
 /// Users can select articles and then run BibliZap snowball on the selected ones.
 #[function_component(PubMedResultsView)]
 pub fn pubmed_results_view(props: &PubmedResultsProps) -> Html {
-    let selected = use_state(|| HashSet::<String>::new());
+    let selected_set = use_state(|| HashSet::<String>::new());
 
     let toggle_all = {
-        let selected = selected.clone();
+        let selected = selected_set.clone();
         let results = props.results.clone();
         Callback::from(move |_: MouseEvent| {
             let mut current = (*selected).clone();
@@ -81,7 +81,7 @@ pub fn pubmed_results_view(props: &PubmedResultsProps) -> Html {
     };
 
     let on_run = {
-        let selected = selected.clone();
+        let selected = selected_set.clone();
         let results = props.results.clone();
         let on_run_snowball = props.on_run_snowball.clone();
         Callback::from(move |_: MouseEvent| {
@@ -95,8 +95,8 @@ pub fn pubmed_results_view(props: &PubmedResultsProps) -> Html {
         })
     };
 
-    let all_selected = selected.len() == props.results.len() && !props.results.is_empty();
-    let has_selection = !selected.is_empty();
+    let all_selected = selected_set.len() == props.results.len() && !props.results.is_empty();
+    let has_selection = !selected_set.is_empty();
 
     html! {
         <div class="container-fluid">
@@ -123,7 +123,7 @@ pub fn pubmed_results_view(props: &PubmedResultsProps) -> Html {
                         disabled={!has_selection}
                     >
                         <i class="bi bi-search"></i>
-                        { format!(" Run BibliZap with {} selected", selected.len()) }
+                        { format!(" Run BibliZap with {} selected", selected_set.len()) }
                     </button>
                 </div>
             </div>
@@ -142,51 +142,8 @@ pub fn pubmed_results_view(props: &PubmedResultsProps) -> Html {
                     </thead>
                     <tbody class="table-group-divider">
                         { props.results.iter().map(|article| {
-                            let pmid = article.pmid.clone();
-                            let is_selected = selected.contains(&pmid);
-                            let toggle = {
-                                let selected = selected.clone();
-                                let pmid = pmid.clone();
-                                Callback::from(move |_: MouseEvent| {
-                                    let mut current = (*selected).clone();
-                                    if current.contains(&pmid) {
-                                        current.remove(&pmid);
-                                    } else {
-                                        current.insert(pmid.clone());
-                                    }
-                                    selected.set(current);
-                                })
-                            };
-
-                            let row_class = if is_selected { "table-primary" } else { "" };
-
                             html! {
-                                <tr class={row_class} style="cursor:pointer" onclick={toggle.clone()}>
-                                    <td class="text-center">
-                                        <input
-                                            type="checkbox"
-                                            class="form-check-input"
-                                            checked={is_selected}
-                                            onclick={toggle}
-                                        />
-                                    </td>
-                                    <td>
-                                        <a href={format!("https://pubmed.ncbi.nlm.nih.gov/{}/", article.pmid)}
-                                           target="_blank"
-                                           onclick={Callback::from(|e: MouseEvent| e.stop_propagation())}
-                                        >
-                                            {&article.pmid}
-                                        </a>
-                                    </td>
-                                    <td>{article.title.as_deref().unwrap_or("—")}</td>
-                                    <td>
-                                        <small>{article.authors.as_deref().unwrap_or("—")}</small>
-                                    </td>
-                                    <td>
-                                        <small><em>{article.journal.as_deref().unwrap_or("—")}</em></small>
-                                    </td>
-                                    <td>{article.year.as_deref().unwrap_or("—")}</td>
-                                </tr>
+                                <Item result={article.clone()} selected_set={selected_set.clone()} />
                             }
                         }).collect::<Html>() }
                     </tbody>
@@ -201,10 +158,69 @@ pub fn pubmed_results_view(props: &PubmedResultsProps) -> Html {
                         onclick={on_run.clone()}
                     >
                         <i class="bi bi-search"></i>
-                        { format!(" Run BibliZap with {} selected article{}", selected.len(), if selected.len() > 1 { "s" } else { "" }) }
+                        { format!(" Run BibliZap with {} selected article{}", selected_set.len(), if selected_set.len() > 1 { "s" } else { "" }) }
                     </button>
                 </div>
             }
         </div>
+    }
+}
+
+/// Properties for the PubMedResults component.
+#[derive(Clone, PartialEq, Properties)]
+pub struct ItemProps {
+    pub result: PubmedSearchResult,
+    pub selected_set: UseStateHandle<HashSet<String>>,
+}
+
+#[function_component(Item)]
+fn item(props: &ItemProps) -> Html {
+    let result = &props.result;
+    let selected_set = props.selected_set.clone();
+    let pmid = result.pmid.clone();
+    let is_selected = selected_set.contains(&pmid);
+    let toggle = {
+        let selected = selected_set.clone();
+        let pmid = pmid.clone();
+        Callback::from(move |_: MouseEvent| {
+            let mut current = (*selected).clone();
+            if current.contains(&pmid) {
+                current.remove(&pmid);
+            } else {
+                current.insert(pmid.clone());
+            }
+            selected.set(current);
+        })
+    };
+
+    let row_class = if is_selected { "table-primary" } else { "" };
+
+    html! {
+        <tr class={row_class} style="cursor:pointer" onclick={toggle.clone()}>
+            <td class="text-center">
+                <input
+                    type="checkbox"
+                    class="form-check-input"
+                    checked={is_selected}
+                    onclick={toggle}
+                />
+            </td>
+            <td>
+                <a href={format!("https://pubmed.ncbi.nlm.nih.gov/{}/", result.pmid)}
+                   target="_blank"
+                   onclick={Callback::from(|e: MouseEvent| e.stop_propagation())}
+                >
+                    {&result.pmid}
+                </a>
+            </td>
+            <td>{result.title.as_deref().unwrap_or("—")}</td>
+            <td>
+                <small>{result.authors.as_deref().unwrap_or("—")}</small>
+            </td>
+            <td>
+                <small><em>{result.journal.as_deref().unwrap_or("—")}</em></small>
+            </td>
+            <td>{result.year.as_deref().unwrap_or("—")}</td>
+        </tr>
     }
 }
