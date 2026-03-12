@@ -21,7 +21,7 @@ use form::SnowballForm;
 mod common;
 use common::{CurrentPage, Error};
 
-use crate::results::pubmed::{PubMedResultsView, PubmedSearchResult};
+use crate::results::pubmed::PubmedSearchResult;
 
 /// The main application component.
 /// Manages the current page state and dark mode state.
@@ -74,7 +74,7 @@ fn app() -> Html {
         let results_status = results_status.clone();
         Callback::from(move |table: Result<Rc<RefCell<Vec<Article>>>, Error>| {
             match table {
-                Ok(table) => results_status.set(ResultsStatus::Available(table)),
+                Ok(table) => results_status.set(ResultsStatus::BiblizapResults(table)),
                 Err(error) => results_status.set(ResultsStatus::RequestError(error.to_string())),
             };
         })
@@ -137,25 +137,11 @@ fn app() -> Html {
         _ => "results-fade-in",
     };
 
-    // Render PubMed results view if in that state
-    let pubmed_content = match results_status.deref() {
-        ResultsStatus::PubMedResults(pubmed_results) => {
-            html! {
-                <PubMedResultsView
-                    results={pubmed_results.clone()}
-                    on_run_snowball={on_run_snowball.clone()}
-                />
-            }
-        }
-        _ => html! {},
-    };
-
     html! {
         <div>
             <div class={form_class}>
                 <SnowballForm {on_submit_error} {on_requesting_results} {on_receiving_response} {on_pubmed_results}/>
             </div>
-            {pubmed_content}
             <div class={results_class}>
                 <ResultsContainer results_status={results_status.clone()} on_run_snowball={on_run_snowball.clone()} />
             </div>

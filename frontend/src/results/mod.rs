@@ -19,7 +19,7 @@ use download::*;
 mod item;
 use item::Item;
 
-use crate::results::pubmed::PubmedSearchResult;
+use crate::results::pubmed::{PubMedResultsView, PubmedSearchResult};
 
 /// Enum representing the sort state of a column.
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -54,7 +54,7 @@ pub enum ResultsStatus {
     Requested,
     RequestError(String),
     PubMedResults(Vec<PubmedSearchResult>),
-    Available(Rc<RefCell<Vec<Article>>>),
+    BiblizapResults(Rc<RefCell<Vec<Article>>>),
 }
 
 /// Properties for the ResultsContainer component.
@@ -71,12 +71,22 @@ pub fn table_container(props: &ResultsContainerProps) -> Html {
         ResultsStatus::NotRequested => {
             html! {}
         }
-        ResultsStatus::PubMedResults(_) => {
+        ResultsStatus::PubMedResults(pubmed_results) => {
             // Rendered by the parent BibliZapApp component
-            html! {}
+            html! {
+                <PubMedResultsView
+                    results={pubmed_results.clone()}
+                    on_run_snowball={props.on_run_snowball.clone()}
+                />
+            }
         }
-        ResultsStatus::Available(articles) => {
-            html! {<Results articles={articles} on_run_snowball={props.on_run_snowball.clone()}/>}
+        ResultsStatus::BiblizapResults(biblizap_results) => {
+            html! {
+                <Results
+                    articles={biblizap_results}
+                    on_run_snowball={props.on_run_snowball.clone()}
+                />
+            }
         }
         ResultsStatus::Requested => {
             html! {<Spinner/>}
