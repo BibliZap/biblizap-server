@@ -510,6 +510,7 @@ checksum = "2af50177e190e07a26ab74f8b1efbfe2ef87da2116221318cb1c2e82baf7de06"
 [[package]]
 name = "biblizap-rs"
 version = "1.2.2"
+source = "git+https://github.com/BibliZap/biblizap-rs#05ecd50295288b7e8478d20469041806ebf40ab1"
 dependencies = [
  "anyhow",
  "arrayvec",

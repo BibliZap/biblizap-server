@@ -1,0 +1,12 @@
+# biblizap.toml — example configuration for BibliZap
+# All lines are commented by default. To enable a setting, remove the leading '#'.
+# WARNING: do NOT commit real secrets into this file in public repos.
+# If you store the Lens API key here, ensure this file is mode 600.
+
+# Optional: public, non-secret settings
+# bind_address = "127.0.0.1"
+# port = 35642
+
+# To set the Lens API key in this file, uncomment and replace the value below.
+# Make sure this file is readable only by the owner (chmod 600) if it contains secrets.
+# lens_api_key = "REPLACE_WITH_YOUR_LENS_API_KEY"
