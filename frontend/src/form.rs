@@ -4,10 +4,11 @@ use std::rc::Rc;
 use serde::Serialize;
 use yew::prelude::*;
 
-use crate::common::{self, PubmedSearchResult, SearchFor, get_value};
+use crate::common::{self, SearchFor, get_value};
 
 use crate::common::*;
 use crate::results::article::Article;
+use crate::results::pubmed::{get_pubmed_results, PubmedSearchResult};
 
 /// Validates if a string is a valid DOI.
 /// DOIs start with "10." followed by at least 4 digits, a "/", and a suffix.
@@ -162,41 +163,6 @@ async fn get_response(
     Ok(Rc::new(RefCell::new(articles)))
 }
 
-/// Sends a PubMed keyword search request to the backend.
-async fn get_pubmed_results(query: &str) -> Result<Vec<PubmedSearchResult>, Error> {
-    use gloo_utils::document;
-    let url = document().document_uri();
-    let url = match url {
-        Ok(href) => Ok(href),
-        Err(err) => Err(Error::JsValueString(err.as_string().unwrap_or_default())),
-    }?
-    .replace('#', "");
-
-    let mut api_url = url::Url::parse(&url)?;
-    api_url.set_fragment("".into());
-    api_url.set_query("".into());
-    api_url.set_path("api/pubmed_search");
-
-    let body = serde_json::json!({
-        "query": query,
-        "max_results": 20
-    });
-
-    let response = gloo_net::http::Request::post(api_url.as_str())
-        .header("Access-Control-Allow-Origin", "*")
-        .body(serde_json::to_string(&body)?)?
-        .send()
-        .await?;
-
-    let result_text = response.text().await?;
-
-    if !response.ok() {
-        return Err(Error::Api(result_text));
-    }
-
-    let results: Vec<PubmedSearchResult> = serde_json::from_str(&result_text)?;
-    Ok(results)
-}
 
 /// Checks the URL query parameters for a prefill `id_list_prefill`.
 /// Returns the prefill string if found, otherwise `None`.

@@ -18,11 +18,10 @@ use wall::*;
 mod form;
 use form::SnowballForm;
 
-mod pubmed_results;
-use pubmed_results::PubMedResultsView;
-
 mod common;
-use common::{CurrentPage, Error, PubmedSearchResult};
+use common::{CurrentPage, Error};
+
+use crate::results::pubmed::{PubMedResultsView, PubmedSearchResult};
 
 /// The main application component.
 /// Manages the current page state and dark mode state.
@@ -166,9 +165,7 @@ fn app() -> Html {
 
 /// Runs the snowball search with a list of article IDs (DOIs or PMIDs).
 /// This is called when the user selects articles from PubMed keyword search results.
-async fn run_snowball_with_ids(
-    ids: &[String],
-) -> Result<Rc<RefCell<Vec<Article>>>, Error> {
+async fn run_snowball_with_ids(ids: &[String]) -> Result<Rc<RefCell<Vec<Article>>>, Error> {
     use gloo_utils::document;
     let url = document().document_uri();
     let url = match url {

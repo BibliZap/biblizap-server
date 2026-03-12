@@ -82,7 +82,7 @@ pub fn row(props: &RowProps) -> Html {
                                     } else {
                                         html! {}
                                     }}
-                                    
+
                                     <div class="d-flex gap-2">
                                         {if let Some(doi) = &props.article.doi {
                                             html! {

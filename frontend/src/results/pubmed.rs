@@ -1,7 +1,54 @@
+use crate::common::Error;
+use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use yew::prelude::*;
 
-use crate::common::PubmedSearchResult;
+/// A single article result from a PubMed keyword search.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub struct PubmedSearchResult {
+    pub pmid: String,
+    pub title: Option<String>,
+    pub authors: Option<String>,
+    pub journal: Option<String>,
+    pub year: Option<String>,
+    pub doi: Option<String>,
+}
+
+/// Sends a PubMed keyword search request to the backend.
+pub async fn get_pubmed_results(query: &str) -> Result<Vec<PubmedSearchResult>, Error> {
+    use gloo_utils::document;
+    let url = document().document_uri();
+    let url = match url {
+        Ok(href) => Ok(href),
+        Err(err) => Err(Error::JsValueString(err.as_string().unwrap_or_default())),
+    }?
+    .replace('#', "");
+
+    let mut api_url = url::Url::parse(&url)?;
+    api_url.set_fragment("".into());
+    api_url.set_query("".into());
+    api_url.set_path("api/pubmed_search");
+
+    let body = serde_json::json!({
+        "query": query,
+        "max_results": 20
+    });
+
+    let response = gloo_net::http::Request::post(api_url.as_str())
+        .header("Access-Control-Allow-Origin", "*")
+        .body(serde_json::to_string(&body)?)?
+        .send()
+        .await?;
+
+    let result_text = response.text().await?;
+
+    if !response.ok() {
+        return Err(Error::Api(result_text));
+    }
+
+    let results: Vec<PubmedSearchResult> = serde_json::from_str(&result_text)?;
+    Ok(results)
+}
 
 /// Properties for the PubMedResults component.
 #[derive(Clone, PartialEq, Properties)]
@@ -39,11 +86,10 @@ pub fn pubmed_results_view(props: &PubmedResultsProps) -> Html {
         let on_run_snowball = props.on_run_snowball.clone();
         Callback::from(move |_: MouseEvent| {
             // For each selected PMID, prefer DOI if available (Lens.org has better DOI coverage)
-            let ids: Vec<String> = results.iter()
+            let ids: Vec<String> = results
+                .iter()
                 .filter(|r| selected.contains(&r.pmid))
-                .map(|r| {
-                    r.doi.clone().unwrap_or_else(|| r.pmid.clone())
-                })
+                .map(|r| r.doi.clone().unwrap_or_else(|| r.pmid.clone()))
                 .collect();
             on_run_snowball.emit(ids);
         })

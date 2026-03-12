@@ -1,28 +1,25 @@
+use std::cell::RefCell;
 use std::collections::HashSet;
 use std::ops::Deref;
 use std::rc::Rc;
-use std::{cell::RefCell, ops::DerefMut};
 
 use yew::prelude::*;
 
 pub mod article;
 pub use article::Article;
 
+pub mod pubmed;
+
 mod filter;
 use filter::Filters;
-
-mod footer;
-use footer::TableFooter;
 
 mod download;
 use download::*;
 
-mod row;
-
-mod card;
-
 mod item;
 use item::Item;
+
+use crate::results::pubmed::PubmedSearchResult;
 
 /// Enum representing the sort state of a column.
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -49,8 +46,6 @@ impl SortState {
         }
     }
 }
-
-use crate::common::PubmedSearchResult;
 
 /// Enum representing the status of the search results.
 #[derive(Clone, PartialEq)]
@@ -250,7 +245,10 @@ pub fn results(props: &TableProps) -> Html {
         let on_run_snowball = props.on_run_snowball.clone();
         Callback::from(move |_: MouseEvent| {
             let articles_to_download = get_articles();
-            let ids: Vec<String> = articles_to_download.iter().filter_map(|a| a.doi.clone()).collect();
+            let ids: Vec<String> = articles_to_download
+                .iter()
+                .filter_map(|a| a.doi.clone())
+                .collect();
             on_run_snowball.emit(ids);
         })
     };
@@ -263,12 +261,12 @@ pub fn results(props: &TableProps) -> Html {
             ids.sort();
             ids.dedup();
             let ids_str = ids.join("\n");
-            
+
             wasm_bindgen_futures::spawn_local(async move {
                 let window = web_sys::window().expect("Window should exist");
                 let navigator = window.navigator();
                 let clipboard = navigator.clipboard();
-                
+
                 let promise = clipboard.write_text(&ids_str);
                 let _ = wasm_bindgen_futures::JsFuture::from(promise).await;
             });
@@ -277,7 +275,8 @@ pub fn results(props: &TableProps) -> Html {
 
     let display_limit = use_state(|| 20usize);
 
-    let articles_slice = &articles_to_display[0..std::cmp::min(*display_limit, articles_to_display.len())];
+    let articles_slice =
+        &articles_to_display[0..std::cmp::min(*display_limit, articles_to_display.len())];
 
     let trigger_update = use_force_update();
     let redraw_table = {
@@ -291,8 +290,8 @@ pub fn results(props: &TableProps) -> Html {
         let display_limit = display_limit.clone();
         Callback::from(move |e: MouseEvent| {
             e.prevent_default();
-            
-            // Blur the button to prevent the browser from automatically scrolling 
+
+            // Blur the button to prevent the browser from automatically scrolling
             // down to keep the focused button in the viewport.
             use wasm_bindgen::JsCast;
             if let Some(target) = e.target() {
@@ -300,7 +299,7 @@ pub fn results(props: &TableProps) -> Html {
                     let _ = element.blur();
                 }
             }
-            
+
             display_limit.set(*display_limit + 20);
         })
     };
@@ -313,7 +312,6 @@ pub fn results(props: &TableProps) -> Html {
                         <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
                         <input type="text" class="form-control" placeholder="Search across all fields..." oninput={
                             let filter = global_filter.clone();
-                            let trigger_update = trigger_update.clone();
                             Callback::from(move |e: InputEvent| {
                                 let input: web_sys::HtmlInputElement = e.target_unchecked_into();
                                 filter.set(input.value());
@@ -383,11 +381,11 @@ pub fn results(props: &TableProps) -> Html {
             // Modern List View
             <div class="mb-4">
                 { articles_slice.iter().enumerate().map(|(i, article)| html!{
-                    <Item 
+                    <Item
                         key={article.doi.clone().unwrap_or_else(|| i.to_string())}
-                        article={article.clone()} 
+                        article={article.clone()}
                         index={i}
-                        update_selected={update_selected.clone()} 
+                        update_selected={update_selected.clone()}
                         selected_articles={(*selected_articles).clone()}
                     />
                 } ).collect::<Html>() }
