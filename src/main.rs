@@ -462,7 +462,10 @@ async fn main() -> std::io::Result<()> {
                 web::resource("/api/pubmed_search")
                     .route(web::post().to(pubmed_search)),
             )
-            .service(ResourceFiles::new("/", generated))
+            // Catch all route to serve frontend static files, with fallback to index.html for SPA routing
+            .default_service(
+                ResourceFiles::new("/", generated).resolve_not_found_to_root()
+            )
     })
     .workers(worker_count)
     .bind((bind_address, port))?
