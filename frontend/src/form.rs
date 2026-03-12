@@ -4,7 +4,7 @@ use std::rc::Rc;
 use serde::Serialize;
 use yew::prelude::*;
 
-use crate::common::{self, SearchFor, get_value};
+use crate::common::{self, PubmedSearchResult, SearchFor, get_value};
 
 use crate::common::*;
 use crate::results::article::Article;
@@ -29,6 +29,16 @@ fn is_valid_id(s: &str) -> bool {
     is_valid_doi(s) || is_valid_pmid(s)
 }
 
+/// Checks if the input string contains keywords (i.e., not all tokens are DOIs/PMIDs).
+fn contains_keywords(input: &str) -> bool {
+    let tokens: Vec<&str> = input.trim().split_whitespace().collect();
+    if tokens.is_empty() {
+        return false;
+    }
+    // If ANY token is not a valid DOI or PMID, treat the whole input as keywords
+    tokens.iter().any(|t| !is_valid_id(t))
+}
+
 /// Properties for the SnowballForm component.
 #[derive(Clone, PartialEq, Properties)]
 pub struct FormProps {
@@ -38,6 +48,8 @@ pub struct FormProps {
     pub on_requesting_results: Callback<()>,
     /// Callback for when the search response is received.
     pub on_receiving_response: Callback<Result<Rc<RefCell<Vec<Article>>>, Error>>,
+    /// Callback for when PubMed keyword search results are received.
+    pub on_pubmed_results: Callback<Vec<PubmedSearchResult>>,
 }
 
 /// Struct representing the parameters for the snowball search API request.
@@ -150,6 +162,42 @@ async fn get_response(
     Ok(Rc::new(RefCell::new(articles)))
 }
 
+/// Sends a PubMed keyword search request to the backend.
+async fn get_pubmed_results(query: &str) -> Result<Vec<PubmedSearchResult>, Error> {
+    use gloo_utils::document;
+    let url = document().document_uri();
+    let url = match url {
+        Ok(href) => Ok(href),
+        Err(err) => Err(Error::JsValueString(err.as_string().unwrap_or_default())),
+    }?
+    .replace('#', "");
+
+    let mut api_url = url::Url::parse(&url)?;
+    api_url.set_fragment("".into());
+    api_url.set_query("".into());
+    api_url.set_path("api/pubmed_search");
+
+    let body = serde_json::json!({
+        "query": query,
+        "max_results": 20
+    });
+
+    let response = gloo_net::http::Request::post(api_url.as_str())
+        .header("Access-Control-Allow-Origin", "*")
+        .body(serde_json::to_string(&body)?)?
+        .send()
+        .await?;
+
+    let result_text = response.text().await?;
+
+    if !response.ok() {
+        return Err(Error::Api(result_text));
+    }
+
+    let results: Vec<PubmedSearchResult> = serde_json::from_str(&result_text)?;
+    Ok(results)
+}
+
 /// Checks the URL query parameters for a prefill `id_list_prefill`.
 /// Returns the prefill string if found, otherwise `None`.
 fn id_list_prefill() -> Option<String> {
@@ -172,7 +220,7 @@ fn id_list_prefill() -> Option<String> {
 }
 
 /// Component for the snowball search form.
-/// Allows users to input IDs, select depth, max results, and search direction.
+/// Allows users to input IDs or keywords, select depth, max results, and search direction.
 /// Handles form submission and triggers API requests.
 #[function_component]
 pub fn SnowballForm(props: &FormProps) -> Html {
@@ -202,46 +250,71 @@ pub fn SnowballForm(props: &FormProps) -> Html {
         let on_submit_error = props.on_submit_error.clone();
         let on_receiving_response = props.on_receiving_response.clone();
         let on_requesting_results = props.on_requesting_results.clone();
+        let on_pubmed_results = props.on_pubmed_results.clone();
 
         Callback::from(move |event: SubmitEvent| {
             event.prevent_default();
+
+            // Get the raw input text
+            let input_text = get_value(&id_list_node).unwrap_or_default();
+            let input_trimmed = input_text.trim().to_string();
+
+            if input_trimmed.is_empty() {
+                on_submit_error.emit(common::Error::NoValidIds);
+                return;
+            }
+
             on_requesting_results.emit(());
 
-            let form_content = SnowballParameters::new(
-                id_list_node.clone(),
-                depth_node.clone(),
-                output_max_size_node.clone(),
-                search_for_node.clone(),
-            );
+            if contains_keywords(&input_trimmed) {
+                // Keyword search → PubMed
+                let on_pubmed_results = on_pubmed_results.clone();
+                let on_submit_error = on_submit_error.clone();
+                let query = input_trimmed.clone();
+                wasm_bindgen_futures::spawn_local(async move {
+                    match get_pubmed_results(&query).await {
+                        Ok(results) => on_pubmed_results.emit(results),
+                        Err(e) => on_submit_error.emit(e),
+                    }
+                });
+            } else {
+                // DOI/PMID search → existing snowball flow
+                let form_content = SnowballParameters::new(
+                    id_list_node.clone(),
+                    depth_node.clone(),
+                    output_max_size_node.clone(),
+                    search_for_node.clone(),
+                );
 
-            let form_content = match form_content {
-                Ok(form_content) => form_content,
-                Err(error) => {
-                    on_submit_error.emit(error);
-                    return;
-                }
-            };
+                let form_content = match form_content {
+                    Ok(form_content) => form_content,
+                    Err(error) => {
+                        on_submit_error.emit(error);
+                        return;
+                    }
+                };
 
-            let on_receiving_response = on_receiving_response.clone();
-            wasm_bindgen_futures::spawn_local(async move {
-                let response = get_response(&form_content).await;
-                on_receiving_response.emit(response);
-            });
+                let on_receiving_response = on_receiving_response.clone();
+                wasm_bindgen_futures::spawn_local(async move {
+                    let response = get_response(&form_content).await;
+                    on_receiving_response.emit(response);
+                });
+            }
         })
     };
 
     html! {
         <form class="container-md" onsubmit={onsubmit}>
             <div>
-                <label for="idInput" class="form-label">{"Enter a list of PMIDs or DOIs (maximum 7)"}</label>
+                <label for="idInput" class="form-label">{"Enter PMIDs, DOIs, or keywords"}</label>
                 <div class="input-group input-group-lg">
-                    <input type="text" class="form-control" id="idInput" placeholder="e.g., 12345678 10.1234/example" {onchange} ref={id_list_node.clone()} value={id_list.to_string()}/>
+                    <input type="text" class="form-control" id="idInput" placeholder={"e.g., 12345678  10.1234/example  or  breast cancer MRI"} {onchange} ref={id_list_node.clone()} value={id_list.to_string()}/>
                     <button type="submit" class="btn btn-primary">
                         <i class="bi bi-search"></i>
                         {" Search"}
                     </button>
                 </div>
-                <div id="idInputHelp" class="form-text">{"You can enter up to 7 identifiers separated by spaces. Only DOIs (e.g., 10.1234/example) and PMIDs (e.g., 12345678) are accepted."}</div>
+                <div id="idInputHelp" class="form-text">{"Enter DOIs or PMIDs to run BibliZap directly, or enter keywords to search PubMed first."}</div>
             </div>
             <div class="mb-3 form-check visually-hidden">
                 <div class="row">

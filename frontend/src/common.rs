@@ -1,7 +1,19 @@
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use wasm_bindgen::JsValue;
 use web_sys::Navigator;
 use yew::prelude::*;
+
+/// A single article result from a PubMed keyword search.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub struct PubmedSearchResult {
+    pub pmid: String,
+    pub title: Option<String>,
+    pub authors: Option<String>,
+    pub journal: Option<String>,
+    pub year: Option<String>,
+    pub doi: Option<String>,
+}
 
 /// Custom error type for the frontend application.
 #[derive(Error, Debug)]
