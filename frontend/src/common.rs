@@ -2,6 +2,7 @@ use thiserror::Error;
 use wasm_bindgen::JsValue;
 use web_sys::Navigator;
 use yew::prelude::*;
+use yew_router::prelude::*;
 
 /// Custom error type for the frontend application.
 #[derive(Error, Debug)]
@@ -61,13 +62,19 @@ impl From<JsValue> for Error {
     }
 }
 
-/// Enum representing the different pages in the frontend application.
-#[derive(PartialEq)]
-pub enum CurrentPage {
+#[derive(Clone, Routable, PartialEq)]
+pub enum Route {
+    #[at("/")]
     BibliZapApp,
+    #[at("/how-it-works")]
     HowItWorks,
+    #[at("/contact")]
     Contact,
+    #[at("/legal")]
     LegalInformation,
+    #[not_found]
+    #[at("/404")]
+    NotFound,
 }
 
 /// Enum representing the direction of the snowball search.

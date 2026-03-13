@@ -34,6 +34,7 @@ thiserror = "2.0.18"
 tokio = "1.49.0"
 urlencoding = "2.1"
 uuid = { version = "1.11", features = ["v4", "serde"] }
+yew-router = "0.20.0"
 
 
 [build-dependencies]

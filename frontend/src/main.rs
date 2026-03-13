@@ -19,15 +19,17 @@ mod form;
 use form::SnowballForm;
 
 mod common;
-use common::{CurrentPage, Error};
+use common::Error;
 
+use yew_router::prelude::*;
+
+use crate::common::Route;
 use crate::results::pubmed::PubmedSearchResult;
 
 /// The main application component.
 /// Manages the current page state and dark mode state.
 #[function_component(App)]
 fn app() -> Html {
-    let current_page = use_state(|| CurrentPage::BibliZapApp);
     let dark_mode = use_state(|| false);
 
     match dark_mode.deref() {
@@ -39,28 +41,16 @@ fn app() -> Html {
             .unwrap_or(()),
     }
 
-    let content = match current_page.deref() {
-        CurrentPage::BibliZapApp => {
-            html! {<BibliZapApp/>}
-        }
-        CurrentPage::HowItWorks => {
-            html! {<HowItWorks/>}
-        }
-        CurrentPage::LegalInformation => {
-            html! {<LegalInformation/>}
-        }
-        CurrentPage::Contact => {
-            html! {<Contact/>}
-        }
-    };
     html! {
+        <BrowserRouter>
         <div class="d-flex flex-column min-vh-100">
-            <NavBar current_page={current_page} dark_mode={dark_mode}/>
+            <NavBar dark_mode={dark_mode}/>
             <div class="container my-4">
-                {content}
+                    <Switch<Route> render={switch} />
             </div>
             <Wall/>
         </div>
+        </BrowserRouter>
     }
 }
 
@@ -190,6 +180,16 @@ async fn run_snowball_with_ids(ids: &[String]) -> Result<Rc<RefCell<Vec<Article>
     articles.sort_by_key(|article| std::cmp::Reverse(article.score.unwrap_or_default()));
 
     Ok(Rc::new(RefCell::new(articles)))
+}
+
+fn switch(routes: Route) -> Html {
+    match routes {
+        Route::BibliZapApp => html! { <BibliZapApp/> },
+        Route::HowItWorks => html! { <HowItWorks /> },
+        Route::Contact => html! { <Contact /> },
+        Route::LegalInformation => html! { <LegalInformation /> },
+        Route::NotFound => html! { <BibliZapApp/> },
+    }
 }
 
 /// Entry point for the Yew frontend application.
