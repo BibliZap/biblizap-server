@@ -23,6 +23,10 @@
 
 .form-container-top {
     min-height: auto;
+}
+
+.form-container-top-animated {
+    min-height: auto;
     animation: moveToTop 0.6s ease-out;
 }
 
@@ -40,7 +44,6 @@
     animation-delay: 0.35s;
     animation-fill-mode: both;
     opacity: 0;
-    margin-top: 3rem;
 }
 
 @keyframes fadeIn {

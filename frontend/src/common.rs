@@ -69,11 +69,35 @@ pub struct BibliZapResultsQuery {
     pub ids: String,
 }
 
-/// History state marker set when navigating from the search form.
-/// Presence means the page was reached via an in-app submit (animate the form).
-/// Absence means direct/bookmarked access (skip animation).
-#[derive(Clone, PartialEq, Debug, serde::Serialize, serde::Deserialize)]
-pub struct FromSearch;
+/// Prop for `SnowballForm` indicating the form's current position.
+/// Controls whether the *next* page's form will animate into position.
+/// `Centered` → form is on the landing page; next page will animate.
+/// `Top` → form is already at top (results page); next page won't animate.
+#[derive(Clone, Copy, PartialEq, Debug, Default)]
+pub enum FormPosition {
+    Centered,
+    TopAnimated,
+    #[default]
+    Top,
+}
+
+impl FormPosition {
+    pub fn next(&self) -> Self {
+        match self {
+            FormPosition::Centered => FormPosition::TopAnimated,
+            FormPosition::TopAnimated => FormPosition::Top,
+            FormPosition::Top => FormPosition::Top,
+        }
+    }
+
+    pub fn get_class(&self) -> &'static str {
+        match self {
+            FormPosition::Centered => "form-container-centered",
+            FormPosition::TopAnimated => "form-container-top-animated",
+            FormPosition::Top => "form-container-top",
+        }
+    }
+}
 
 #[derive(Clone, Routable, PartialEq)]
 pub enum Route {

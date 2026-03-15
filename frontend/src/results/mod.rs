@@ -50,7 +50,7 @@ impl SortState {
 #[function_component(Spinner)]
 pub fn spinner() -> Html {
     html! {
-        <div class="container-fluid">
+        <div class="container-fluid mt-5">
             <div class="d-flex justify-content-center">
                 <div class="spinner-border" role="status" style="width: 5rem; height: 5rem; margin-bottom: 50px;">
                     <span class="visually-hidden">{"Loading..."}</span>
@@ -458,19 +458,6 @@ fn location_to_ids(location: &Option<Location>) -> Result<Vec<String>, Error> {
     Ok(ids)
 }
 
-fn form_class_from_location(location: &Option<Location>) -> &'static str {
-    let from_search = location
-        .as_ref()
-        .and_then(|l| l.state::<crate::common::FromSearch>())
-        .is_some();
-
-    if from_search {
-        "form-container-centered"
-    } else {
-        "form-container-top"
-    }
-}
-
 enum FetchStatus {
     Loading,
     Success(Rc<RefCell<Vec<Article>>>),
@@ -479,11 +466,12 @@ enum FetchStatus {
 
 /// The BibliZap results page.
 /// Reads `?ids=` from the URL, fetches results on mount, and renders the results table.
-/// If navigated to via the search form (history state = `FromSearch`), the search bar
-/// animates up from the centre; on direct/bookmarked access it starts at the top.
+/// If navigated to via the search form (history state = `FromSearch(true)`), the search
+/// bar starts centred and rises to the top via a CSS transition on the next paint.
+/// On direct/bookmarked access it starts at the top immediately.
 #[function_component(BibliZapResults)]
 pub fn biblizap_results() -> Html {
-    use crate::common::{BibliZapResultsQuery, Route};
+    use crate::common::{BibliZapResultsQuery, FormPosition, Route};
     use crate::search::SnowballForm;
 
     let location = use_location();
@@ -494,14 +482,25 @@ pub fn biblizap_results() -> Html {
         vec![]
     });
 
-    let form_class = form_class_from_location(&location);
+    // Only animate when explicitly navigated from the search form.
+    let form_position = location
+        .as_ref()
+        .and_then(|l| l.state::<FormPosition>())
+        .map(|s| s.deref().to_owned())
+        .unwrap_or_default();
+
+    let form_class = form_position.get_class();
+    gloo_console::log!(format!("Form position: {:#?}", form_position));
 
     let fetch_status: UseStateHandle<FetchStatus> = use_state(|| FetchStatus::Loading);
-
     {
         let fetch_status = fetch_status.clone();
         let ids = ids.clone();
-        use_effect_with(location, move |_| {
+        // Depend on the ids string, not on `location` (Location doesn't impl PartialEq,
+        // so using it as a dep causes the effect to re-run on every render).
+        let ids_key = ids.join(" ");
+        use_effect_with(ids_key, move |_| {
+            fetch_status.set(FetchStatus::Loading);
             wasm_bindgen_futures::spawn_local(async move {
                 let result = run_snowball_with_ids(&ids).await;
                 match result {
@@ -538,7 +537,7 @@ pub fn biblizap_results() -> Html {
     html! {
         <div>
             <div class={form_class}>
-                <SnowballForm />
+                <SnowballForm position={FormPosition::Top} />
             </div>
             <div class="results-fade-in">
                 {content}
@@ -550,7 +549,7 @@ pub fn biblizap_results() -> Html {
 /// Properties for the Error component.
 #[derive(Clone, PartialEq, Properties)]
 pub struct ErrorProps {
-    msg: AttrValue,
+    pub msg: AttrValue,
 }
 
 /// Component for displaying an error message.

@@ -1,7 +1,9 @@
 use crate::common::Error;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
+use std::ops::Deref;
 use yew::prelude::*;
+use yew_router::prelude::*;
 
 /// A single article result from a PubMed keyword search.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
@@ -222,5 +224,92 @@ fn item(props: &ItemProps) -> Html {
             </td>
             <td>{result.year.as_deref().unwrap_or("—")}</td>
         </tr>
+    }
+}
+
+enum PubmedFetchStatus {
+    Loading,
+    Success(Vec<PubmedSearchResult>),
+    Error(Error),
+}
+
+/// The PubMed results page.
+/// Reads `?q=` from the URL, fetches PubMed search results on mount, and lets the user
+/// select articles to launch a BibliZap snowball search.
+#[function_component(PubMedResultsPage)]
+pub fn pubmed_results_page() -> Html {
+    use crate::common::{BibliZapResultsQuery, FormPosition, Route};
+    use crate::results::{ErrorMessage, Spinner};
+    use crate::search::{PubMedResultsQuery, SnowballForm};
+
+    let location = use_location();
+    let navigator = use_navigator().unwrap();
+
+    let query = location
+        .as_ref()
+        .and_then(|l| l.query::<PubMedResultsQuery>().ok())
+        .map(|q| q.q)
+        .unwrap_or_default();
+
+    if query.is_empty() {
+        navigator.replace(&Route::BibliZapSearch);
+    }
+
+    let form_position = location
+        .as_ref()
+        .and_then(|l| l.state::<FormPosition>())
+        .map(|s| s.deref().to_owned())
+        .unwrap_or_default();
+
+    let form_class = form_position.get_class();
+
+    let fetch_status: UseStateHandle<PubmedFetchStatus> = use_state(|| PubmedFetchStatus::Loading);
+
+    {
+        let fetch_status = fetch_status.clone();
+        let query = query.clone();
+        use_effect_with(query.clone(), move |_| {
+            if !query.is_empty() {
+                fetch_status.set(PubmedFetchStatus::Loading);
+                wasm_bindgen_futures::spawn_local(async move {
+                    let result = get_pubmed_results(&query).await;
+                    match result {
+                        Ok(results) => fetch_status.set(PubmedFetchStatus::Success(results)),
+                        Err(e) => fetch_status.set(PubmedFetchStatus::Error(e)),
+                    }
+                });
+            }
+            || ()
+        });
+    }
+
+    let on_run_snowball = {
+        let navigator = navigator.clone();
+        Callback::from(move |ids: Vec<String>| {
+            let ids_str = ids.join(" ");
+            let _ = navigator.push_with_query(
+                &Route::BibliZapResults,
+                &BibliZapResultsQuery { ids: ids_str },
+            );
+        })
+    };
+
+    let content = match fetch_status.deref() {
+        PubmedFetchStatus::Loading => html! { <Spinner /> },
+        PubmedFetchStatus::Error(e) => html! { <ErrorMessage msg={e.to_string()} /> },
+        PubmedFetchStatus::Success(results) => html! {
+            <PubMedResultsView results={results.clone()} on_run_snowball={on_run_snowball} />
+        },
+    };
+
+    html! {
+        <div>
+            <div class={form_class}>
+                <SnowballForm position={FormPosition::Top} />
+            </div>
+            <div class="results-fade-in">
+                {content}
+            </div>
+        </div>
     }
 }

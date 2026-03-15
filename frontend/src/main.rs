@@ -20,6 +20,7 @@ use search::*;
 mod common;
 
 pub mod pubmed;
+use pubmed::*;
 
 use yew_router::prelude::*;
 
@@ -56,7 +57,7 @@ fn app() -> Html {
 fn switch(routes: Route) -> Html {
     match routes {
         Route::BibliZapSearch => html! { <BibliZapSearchPage/> },
-        Route::PubMedResults => html! { "not implemented" },
+        Route::PubMedResults => html! { <PubMedResultsPage /> },
         Route::BibliZapResults => html! { <BibliZapResults /> },
         Route::HowItWorks => html! { <HowItWorks /> },
         Route::Contact => html! { <Contact /> },

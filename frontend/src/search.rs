@@ -2,7 +2,7 @@ use serde::Serialize;
 use yew::prelude::*;
 use yew_router::prelude::*;
 
-use crate::common::{self, SearchFor, get_value, BibliZapResultsQuery, FromSearch};
+use crate::common::{self, SearchFor, get_value, BibliZapResultsQuery, FormPosition};
 use crate::common::*;
 
 /// Validates if a string is a valid DOI.
@@ -118,19 +118,26 @@ impl SnowballParameters {
 pub fn biblizap_search() -> Html {
     html! {
         <div class="form-container-centered">
-            <SnowballForm />
+            <SnowballForm position={FormPosition::Centered} />
         </div>
     }
 }
 
 
+/// Properties for the search form component.
+#[derive(Clone, PartialEq, Properties)]
+pub struct FormProps {
+    pub position: FormPosition,
+}
+
 /// Component for the snowball search form.
 /// Allows users to input IDs or keywords, select depth, max results, and search direction.
 /// On submit, navigates to `/pubmed-results?q=…` or `/biblizap-results?ids=…`.
-#[function_component]
-pub fn SnowballForm() -> Html {
+#[function_component(SnowballForm)]
+pub fn snowball_form(props: &FormProps) -> Html {
     let navigator = use_navigator().unwrap();
     let location = use_location();
+    let position = props.position;
 
     // Pre-fill from current URL: `?ids=` on BibliZap results page, `?q=` on PubMed page.
     let prefill = location.as_ref().and_then(|l| {
@@ -177,8 +184,8 @@ pub fn SnowballForm() -> Html {
                 // Keyword search → navigate to PubMed results page
                 let _ = navigator.push_with_query_and_state(
                     &Route::PubMedResults,
-                    &PubMedResultsQuery { q: input_trimmed },
-                    &FromSearch,
+                    PubMedResultsQuery { q: input_trimmed },
+                    position.next(),
                 );
             } else {
                 // DOI/PMID search → validate then navigate to BibliZap results page
@@ -192,10 +199,13 @@ pub fn SnowballForm() -> Html {
                 match form_content {
                     Ok(params) => {
                         let ids_str = params.input_id_list.join(" ");
+                        gloo_console::log!(format!("Form position: {:#?}", position));
+                        gloo_console::log!(format!("Next form position: {:#?}", position.next()));
+
                         let _ = navigator.push_with_query_and_state(
                             &Route::BibliZapResults,
-                            &BibliZapResultsQuery { ids: ids_str },
-                            &FromSearch,
+                            BibliZapResultsQuery { ids: ids_str },
+                            position.next()
                         );
                     }
                     Err(_) => {}
