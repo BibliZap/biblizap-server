@@ -4,11 +4,10 @@ use std::ops::Deref;
 use std::rc::Rc;
 
 use yew::prelude::*;
+use yew_router::prelude::*;
 
 pub mod article;
 pub use article::Article;
-
-pub mod pubmed;
 
 mod filter;
 use filter::Filters;
@@ -19,7 +18,7 @@ use download::*;
 mod item;
 use item::Item;
 
-use crate::results::pubmed::{PubMedResultsView, PubmedSearchResult};
+use crate::common::Error;
 
 /// Enum representing the sort state of a column.
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -45,58 +44,6 @@ impl SortState {
             SortState::Descending => "bi-chevron-down",
         }
     }
-}
-
-/// Enum representing the status of the search results.
-#[derive(Clone, PartialEq)]
-pub enum ResultsStatus {
-    NotRequested,
-    Requested,
-    RequestError(String),
-    PubMedResults(Vec<PubmedSearchResult>),
-    BiblizapResults(Rc<RefCell<Vec<Article>>>),
-}
-
-/// Properties for the ResultsContainer component.
-#[derive(Clone, PartialEq, Properties)]
-pub struct ResultsContainerProps {
-    pub results_status: UseStateHandle<ResultsStatus>,
-    pub on_run_snowball: Callback<Vec<String>>,
-}
-/// Container component for displaying search results.
-/// Renders a spinner, error message, or the results table based on the `results_status`.
-#[function_component(ResultsContainer)]
-pub fn table_container(props: &ResultsContainerProps) -> Html {
-    let content = match props.results_status.deref() {
-        ResultsStatus::NotRequested => {
-            html! {}
-        }
-        ResultsStatus::PubMedResults(pubmed_results) => {
-            // Rendered by the parent BibliZapApp component
-            html! {
-                <PubMedResultsView
-                    results={pubmed_results.clone()}
-                    on_run_snowball={props.on_run_snowball.clone()}
-                />
-            }
-        }
-        ResultsStatus::BiblizapResults(biblizap_results) => {
-            html! {
-                <Results
-                    articles={biblizap_results}
-                    on_run_snowball={props.on_run_snowball.clone()}
-                />
-            }
-        }
-        ResultsStatus::Requested => {
-            html! {<Spinner/>}
-        }
-        ResultsStatus::RequestError(msg) => {
-            html! {<Error msg={msg.to_owned()}/>}
-        }
-    };
-
-    content
 }
 
 /// Component for displaying a loading spinner.
@@ -451,6 +398,155 @@ pub fn results(props: &TableProps) -> Html {
 // The advanced headers are no longer implemented in the simple control bar,
 // but we leave Error handling component here.
 
+/// Fetches BibliZap snowball results for a list of IDs from the backend API.
+pub async fn run_snowball_with_ids(ids: &[String]) -> Result<Rc<RefCell<Vec<Article>>>, Error> {
+    use gloo_utils::document;
+    let url = document().document_uri();
+    let url = match url {
+        Ok(href) => Ok(href),
+        Err(err) => Err(Error::JsValueString(err.as_string().unwrap_or_default())),
+    }?
+    .replace('#', "");
+
+    let mut api_url = url::Url::parse(&url)?;
+    api_url.set_fragment("".into());
+    api_url.set_query("".into());
+    api_url.set_path("api");
+
+    let body = serde_json::json!({
+        "output_max_size": "100",
+        "depth": 2,
+        "input_id_list": ids,
+        "search_for": "Both"
+    });
+
+    let response = gloo_net::http::Request::post(api_url.as_str())
+        .header("Access-Control-Allow-Origin", "*")
+        .body(serde_json::to_string(&body)?)?
+        .send()
+        .await?;
+
+    let result_text = response.text().await?;
+
+    if !response.ok() {
+        return Err(Error::Api(result_text));
+    }
+
+    let value = serde_json::from_str::<serde_json::Value>(&result_text)?;
+    let mut articles = serde_json::from_value::<Vec<Article>>(value)?;
+
+    articles.sort_by_key(|article| std::cmp::Reverse(article.score.unwrap_or_default()));
+
+    Ok(Rc::new(RefCell::new(articles)))
+}
+
+fn location_to_ids(location: &Option<Location>) -> Result<Vec<String>, Error> {
+    let ids_string = location
+        .as_ref()
+        .and_then(|l| l.query::<crate::common::BibliZapResultsQuery>().ok())
+        .ok_or_else(|| Error::JsValueString("Missing query parameters".to_string()))?
+        .ids;
+
+    let ids: Vec<String> = ids_string
+        .split_whitespace()
+        .map(|s| s.to_string())
+        .collect();
+
+    if ids.is_empty() {
+        return Err(Error::NoValidIds);
+    }
+    Ok(ids)
+}
+
+fn form_class_from_location(location: &Option<Location>) -> &'static str {
+    let from_search = location
+        .as_ref()
+        .and_then(|l| l.state::<crate::common::FromSearch>())
+        .is_some();
+
+    if from_search {
+        "form-container-centered"
+    } else {
+        "form-container-top"
+    }
+}
+
+enum FetchStatus {
+    Loading,
+    Success(Rc<RefCell<Vec<Article>>>),
+    Error(Error),
+}
+
+/// The BibliZap results page.
+/// Reads `?ids=` from the URL, fetches results on mount, and renders the results table.
+/// If navigated to via the search form (history state = `FromSearch`), the search bar
+/// animates up from the centre; on direct/bookmarked access it starts at the top.
+#[function_component(BibliZapResults)]
+pub fn biblizap_results() -> Html {
+    use crate::common::{BibliZapResultsQuery, Route};
+    use crate::search::SnowballForm;
+
+    let location = use_location();
+    let navigator = use_navigator().unwrap();
+
+    let ids: Vec<String> = location_to_ids(&location).unwrap_or_else(|_| {
+        navigator.replace(&Route::BibliZapSearch);
+        vec![]
+    });
+
+    let form_class = form_class_from_location(&location);
+
+    let fetch_status: UseStateHandle<FetchStatus> = use_state(|| FetchStatus::Loading);
+
+    {
+        let fetch_status = fetch_status.clone();
+        let ids = ids.clone();
+        use_effect_with(location, move |_| {
+            wasm_bindgen_futures::spawn_local(async move {
+                let result = run_snowball_with_ids(&ids).await;
+                match result {
+                    Ok(articles) => fetch_status.set(FetchStatus::Success(articles)),
+                    Err(e) => fetch_status.set(FetchStatus::Error(e)),
+                }
+            });
+            || ()
+        });
+    }
+
+    let on_run_snowball = {
+        let navigator = navigator.clone();
+        Callback::from(move |ids: Vec<String>| {
+            let ids_str = ids.join(" ");
+            let _ = navigator.push_with_query(
+                &Route::BibliZapResults,
+                &BibliZapResultsQuery { ids: ids_str },
+            );
+        })
+    };
+
+    let content = match fetch_status.deref() {
+        FetchStatus::Loading => html! { <Spinner /> },
+        FetchStatus::Error(msg) => html! { <ErrorMessage msg={msg.to_string()} /> },
+        FetchStatus::Success(articles) => html! {
+            <Results
+                articles={articles}
+                on_run_snowball={on_run_snowball}
+            />
+        },
+    };
+
+    html! {
+        <div>
+            <div class={form_class}>
+                <SnowballForm />
+            </div>
+            <div class="results-fade-in">
+                {content}
+            </div>
+        </div>
+    }
+}
+
 /// Properties for the Error component.
 #[derive(Clone, PartialEq, Properties)]
 pub struct ErrorProps {
@@ -458,7 +554,7 @@ pub struct ErrorProps {
 }
 
 /// Component for displaying an error message.
-#[function_component(Error)]
+#[function_component(ErrorMessage)]
 pub fn error(props: &ErrorProps) -> Html {
     html! {
         <div class="container-fluid">

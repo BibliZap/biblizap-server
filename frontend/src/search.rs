@@ -1,14 +1,9 @@
-use std::cell::RefCell;
-use std::rc::Rc;
-
 use serde::Serialize;
 use yew::prelude::*;
+use yew_router::prelude::*;
 
-use crate::common::{self, SearchFor, get_value};
-
+use crate::common::{self, SearchFor, get_value, BibliZapResultsQuery, FromSearch};
 use crate::common::*;
-use crate::results::article::Article;
-use crate::results::pubmed::{get_pubmed_results, PubmedSearchResult};
 
 /// Validates if a string is a valid DOI.
 /// DOIs start with "10." followed by at least 4 digits, a "/", and a suffix.
@@ -40,17 +35,10 @@ fn contains_keywords(input: &str) -> bool {
     tokens.iter().any(|t| !is_valid_id(t))
 }
 
-/// Properties for the SnowballForm component.
-#[derive(Clone, PartialEq, Properties)]
-pub struct FormProps {
-    /// Callback for when a submission error occurs.
-    pub on_submit_error: Callback<common::Error>,
-    /// Callback for when the search request is initiated.
-    pub on_requesting_results: Callback<()>,
-    /// Callback for when the search response is received.
-    pub on_receiving_response: Callback<Result<Rc<RefCell<Vec<Article>>>, Error>>,
-    /// Callback for when PubMed keyword search results are received.
-    pub on_pubmed_results: Callback<Vec<PubmedSearchResult>>,
+/// Query params for `/pubmed-results?q=…`
+#[derive(Clone, PartialEq, Debug, serde::Serialize, serde::Deserialize)]
+pub struct PubMedResultsQuery {
+    pub q: String,
 }
 
 /// Struct representing the parameters for the snowball search API request.
@@ -124,78 +112,38 @@ impl SnowballParameters {
     }
 }
 
-/// Sends the snowball search request to the backend API.
-/// Takes the form content as `SnowballParameters`.
-/// Returns a `Result` containing a shared reference to a vector of `Article` or an `Error`.
-async fn get_response(
-    form_content: &SnowballParameters,
-) -> Result<Rc<RefCell<Vec<Article>>>, Error> {
-    use gloo_utils::document;
-    let url = document().document_uri();
-    let url = match url {
-        Ok(href) => Ok(href),
-        Err(err) => Err(Error::JsValueString(err.as_string().unwrap_or_default())),
-    }?
-    .replace('#', "");
 
-    let mut api_url = url::Url::parse(&url)?;
-    api_url.set_fragment("".into());
-    api_url.set_query("".into());
-    api_url.set_path("api");
-
-    let response = gloo_net::http::Request::post(api_url.as_str())
-        .header("Access-Control-Allow-Origin", "*")
-        .body(serde_json::to_string(&form_content)?)?
-        .send()
-        .await?;
-
-    let result_text = response.text().await?;
-
-    if !response.ok() {
-        return Err(Error::Api(result_text));
+/// Landing page — just the centered search form.
+#[function_component(BibliZapSearchPage)]
+pub fn biblizap_search() -> Html {
+    html! {
+        <div class="form-container-centered">
+            <SnowballForm />
+        </div>
     }
-
-    let value = serde_json::from_str::<serde_json::Value>(&result_text)?;
-    let mut articles = serde_json::from_value::<Vec<Article>>(value)?;
-
-    articles.sort_by_key(|article| std::cmp::Reverse(article.score.unwrap_or_default()));
-
-    Ok(Rc::new(RefCell::new(articles)))
 }
 
-
-/// Checks the URL query parameters for a prefill `id_list_prefill`.
-/// Returns the prefill string if found, otherwise `None`.
-fn id_list_prefill() -> Option<String> {
-    let url = gloo_utils::document().document_uri();
-    let url = match url {
-        Ok(href) => Ok(href),
-        Err(err) => Err(Error::JsValueString(err.as_string().unwrap_or_default())),
-    }
-    .ok()?;
-
-    let id_list_prefill = url::Url::parse(&url)
-        .ok()?
-        .query_pairs()
-        .filter(|(k, _)| k.eq("id_list_prefill"))
-        .map(|(_, v)| v)
-        .fold(String::with_capacity(url.len()), |a, b| a + &b)
-        .replace(',', " ");
-
-    Some(id_list_prefill)
-}
 
 /// Component for the snowball search form.
 /// Allows users to input IDs or keywords, select depth, max results, and search direction.
-/// Handles form submission and triggers API requests.
+/// On submit, navigates to `/pubmed-results?q=…` or `/biblizap-results?ids=…`.
 #[function_component]
-pub fn SnowballForm(props: &FormProps) -> Html {
+pub fn SnowballForm() -> Html {
+    let navigator = use_navigator().unwrap();
+    let location = use_location();
+
+    // Pre-fill from current URL: `?ids=` on BibliZap results page, `?q=` on PubMed page.
+    let prefill = location.as_ref().and_then(|l| {
+        l.query::<BibliZapResultsQuery>().ok().map(|q| q.ids)
+            .or_else(|| l.query::<PubMedResultsQuery>().ok().map(|q| q.q))
+    }).unwrap_or_default();
+
     let id_list_node = use_node_ref();
     let depth_node = use_node_ref();
     let output_max_size_node = use_node_ref();
     let search_for_node = use_node_ref();
 
-    let id_list = use_state(|| id_list_prefill().unwrap_or_default());
+    let id_list = use_state(|| prefill);
 
     let onchange = {
         let id_list_node = id_list_node.clone();
@@ -213,38 +161,27 @@ pub fn SnowballForm(props: &FormProps) -> Html {
         let depth_node = depth_node.clone();
         let output_max_size_node = output_max_size_node.clone();
         let search_for_node = search_for_node.clone();
-        let on_submit_error = props.on_submit_error.clone();
-        let on_receiving_response = props.on_receiving_response.clone();
-        let on_requesting_results = props.on_requesting_results.clone();
-        let on_pubmed_results = props.on_pubmed_results.clone();
+        let navigator = navigator.clone();
 
         Callback::from(move |event: SubmitEvent| {
             event.prevent_default();
 
-            // Get the raw input text
             let input_text = get_value(&id_list_node).unwrap_or_default();
             let input_trimmed = input_text.trim().to_string();
 
             if input_trimmed.is_empty() {
-                on_submit_error.emit(common::Error::NoValidIds);
                 return;
             }
 
-            on_requesting_results.emit(());
-
             if contains_keywords(&input_trimmed) {
-                // Keyword search → PubMed
-                let on_pubmed_results = on_pubmed_results.clone();
-                let on_submit_error = on_submit_error.clone();
-                let query = input_trimmed.clone();
-                wasm_bindgen_futures::spawn_local(async move {
-                    match get_pubmed_results(&query).await {
-                        Ok(results) => on_pubmed_results.emit(results),
-                        Err(e) => on_submit_error.emit(e),
-                    }
-                });
+                // Keyword search → navigate to PubMed results page
+                let _ = navigator.push_with_query_and_state(
+                    &Route::PubMedResults,
+                    &PubMedResultsQuery { q: input_trimmed },
+                    &FromSearch,
+                );
             } else {
-                // DOI/PMID search → existing snowball flow
+                // DOI/PMID search → validate then navigate to BibliZap results page
                 let form_content = SnowballParameters::new(
                     id_list_node.clone(),
                     depth_node.clone(),
@@ -252,19 +189,17 @@ pub fn SnowballForm(props: &FormProps) -> Html {
                     search_for_node.clone(),
                 );
 
-                let form_content = match form_content {
-                    Ok(form_content) => form_content,
-                    Err(error) => {
-                        on_submit_error.emit(error);
-                        return;
+                match form_content {
+                    Ok(params) => {
+                        let ids_str = params.input_id_list.join(" ");
+                        let _ = navigator.push_with_query_and_state(
+                            &Route::BibliZapResults,
+                            &BibliZapResultsQuery { ids: ids_str },
+                            &FromSearch,
+                        );
                     }
-                };
-
-                let on_receiving_response = on_receiving_response.clone();
-                wasm_bindgen_futures::spawn_local(async move {
-                    let response = get_response(&form_content).await;
-                    on_receiving_response.emit(response);
-                });
+                    Err(_) => {}
+                }
             }
         })
     };

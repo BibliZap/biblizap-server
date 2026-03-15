@@ -27,7 +27,7 @@ pub fn NavBar(props: &NavBarProps) -> Html {
     html! {
     <nav class="navbar navbar-expand-lg bg-body-tertiary">
         <div class="container-fluid">
-            <Link<Route> to={Route::BibliZapApp} classes="navbar-brand">
+            <Link<Route> to={Route::BibliZapSearch} classes="navbar-brand">
                 <img src="/icons/biblizap-nosnowball-round-fill.svg" alt="" width="50" height="50" class="px-2"/>
                 {"BibliZap"}
             </Link<Route>>
@@ -37,8 +37,8 @@ pub fn NavBar(props: &NavBarProps) -> Html {
             <div id="navbarSupportedContent" class="collapse navbar-collapse">
                 <ul class="navbar-nav navbar-expand-lg">
                     <li class="nav-item">
-                        <Link<Route> to={Route::BibliZapApp}
-                            classes={if route == Some(Route::BibliZapApp) { "nav-link active" } else { "nav-link" }}>
+                        <Link<Route> to={Route::BibliZapSearch}
+                            classes={if route == Some(Route::BibliZapSearch) { "nav-link active" } else { "nav-link" }}>
                             <i class="bi bi-house-fill px-2"></i>
                             {"App"}
                         </Link<Route>>

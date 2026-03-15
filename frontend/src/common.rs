@@ -62,12 +62,29 @@ impl From<JsValue> for Error {
     }
 }
 
+/// Query params for `/biblizap-results?ids=…`
+#[derive(Clone, PartialEq, Debug, serde::Serialize, serde::Deserialize)]
+pub struct BibliZapResultsQuery {
+    /// Space-separated list of DOIs / PMIDs.
+    pub ids: String,
+}
+
+/// History state marker set when navigating from the search form.
+/// Presence means the page was reached via an in-app submit (animate the form).
+/// Absence means direct/bookmarked access (skip animation).
+#[derive(Clone, PartialEq, Debug, serde::Serialize, serde::Deserialize)]
+pub struct FromSearch;
+
 #[derive(Clone, Routable, PartialEq)]
 pub enum Route {
     #[at("/")]
-    BibliZapApp,
+    BibliZapSearch,
     #[at("/how-it-works")]
     HowItWorks,
+    #[at("/pubmed-results")]
+    PubMedResults,
+    #[at("/biblizap-results")]
+    BibliZapResults,
     #[at("/contact")]
     Contact,
     #[at("/legal")]
