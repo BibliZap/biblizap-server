@@ -472,7 +472,7 @@ enum FetchStatus {
 #[function_component(BibliZapResults)]
 pub fn biblizap_results() -> Html {
     use crate::common::{BibliZapResultsQuery, FormPosition, Route};
-    use crate::search::SnowballForm;
+    use crate::search::BiblizapSearchBar;
 
     let location = use_location();
     let navigator = use_navigator().unwrap();
@@ -537,7 +537,7 @@ pub fn biblizap_results() -> Html {
     html! {
         <div>
             <div class={form_class}>
-                <SnowballForm position={FormPosition::Top} />
+                <BiblizapSearchBar position={FormPosition::Top} value={ids.join(" ")} />
             </div>
             <div class="results-fade-in">
                 {content}

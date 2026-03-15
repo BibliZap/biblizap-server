@@ -240,7 +240,7 @@ enum PubmedFetchStatus {
 pub fn pubmed_results_page() -> Html {
     use crate::common::{BibliZapResultsQuery, FormPosition, Route};
     use crate::results::{ErrorMessage, Spinner};
-    use crate::search::{PubMedResultsQuery, SnowballForm};
+    use crate::search::{BiblizapSearchBar, PubMedResultsQuery};
 
     let location = use_location();
     let navigator = use_navigator().unwrap();
@@ -305,7 +305,7 @@ pub fn pubmed_results_page() -> Html {
     html! {
         <div>
             <div class={form_class}>
-                <SnowballForm position={FormPosition::Top} />
+                <BiblizapSearchBar position={FormPosition::Top} value={query.clone()} />
             </div>
             <div class="results-fade-in">
                 {content}

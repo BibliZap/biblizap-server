@@ -118,7 +118,7 @@ impl SnowballParameters {
 pub fn biblizap_search() -> Html {
     html! {
         <div class="form-container-centered">
-            <SnowballForm position={FormPosition::Centered} />
+            <BiblizapSearchBar position={FormPosition::Centered} value={String::new()} />
         </div>
     }
 }
@@ -126,31 +126,32 @@ pub fn biblizap_search() -> Html {
 
 /// Properties for the search form component.
 #[derive(Clone, PartialEq, Properties)]
-pub struct FormProps {
+pub struct SearchBarProps {
     pub position: FormPosition,
+    pub value: String,
 }
 
 /// Component for the snowball search form.
 /// Allows users to input IDs or keywords, select depth, max results, and search direction.
 /// On submit, navigates to `/pubmed-results?q=…` or `/biblizap-results?ids=…`.
-#[function_component(SnowballForm)]
-pub fn snowball_form(props: &FormProps) -> Html {
+#[function_component(BiblizapSearchBar)]
+pub fn biblizap_search_bar(props: &SearchBarProps) -> Html {
     let navigator = use_navigator().unwrap();
-    let location = use_location();
     let position = props.position;
-
-    // Pre-fill from current URL: `?ids=` on BibliZap results page, `?q=` on PubMed page.
-    let prefill = location.as_ref().and_then(|l| {
-        l.query::<BibliZapResultsQuery>().ok().map(|q| q.ids)
-            .or_else(|| l.query::<PubMedResultsQuery>().ok().map(|q| q.q))
-    }).unwrap_or_default();
 
     let id_list_node = use_node_ref();
     let depth_node = use_node_ref();
     let output_max_size_node = use_node_ref();
     let search_for_node = use_node_ref();
 
-    let id_list = use_state(|| prefill);
+    let id_list = use_state(|| props.value.clone());
+    use_effect_with(props.value.clone(), {
+        let id_list = id_list.clone();
+        move |v| {
+            id_list.set(v.clone());
+            || ()
+        }
+    });
 
     let onchange = {
         let id_list_node = id_list_node.clone();
