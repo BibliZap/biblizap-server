@@ -204,7 +204,10 @@ fn item(props: &ItemProps) -> Html {
                     type="checkbox"
                     class="form-check-input"
                     checked={is_selected}
-                    onclick={toggle}
+                    onclick={Callback::from(move |e: MouseEvent| {
+                        e.stop_propagation();
+                        toggle.emit(e);
+                    })}
                 />
             </td>
             <td>
