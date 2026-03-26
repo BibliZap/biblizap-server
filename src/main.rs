@@ -466,6 +466,7 @@ async fn main() -> std::io::Result<()> {
             .default_service(
                 ResourceFiles::new("/", generated).resolve_not_found_to_root()
             )
+            .wrap(actix_web::middleware::Compress::default())
     })
     .workers(worker_count)
     .bind((bind_address, port))?

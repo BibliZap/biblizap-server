@@ -47,7 +47,6 @@ dependencies = [
  "js-sys",
  "paste",
  "rand",
- "regex",
  "rust_xlsxwriter",
  "serde",
  "serde_json",
