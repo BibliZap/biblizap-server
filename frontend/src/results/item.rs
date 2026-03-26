@@ -53,22 +53,37 @@ pub fn item(props: &ItemProps) -> Html {
         })
     };
 
+    let onclick_item = {
+        let update_selected = props.update_selected.clone();
+        let doi = props.article.doi.clone();
+        Callback::from(move |_: MouseEvent| {
+            if let Some(doi) = &doi {
+                update_selected.emit((doi.clone(), !is_selected));
+            }
+        })
+    };
+
+    let stop_click = Callback::from(|e: MouseEvent| e.stop_propagation());
+
     let index_str = format!("{}.", props.index + 1);
+    let item_class = if is_selected {
+        "result-item py-4 px-2 border-bottom selected"
+    } else {
+        "result-item py-4 px-2 border-bottom"
+    };
 
     html! {
-        <div class="result-item py-4 px-2 border-bottom" style="transition: background-color 0.15s ease-in-out;">
+        <div class={item_class} onclick={onclick_item} style="transition: background-color 0.15s ease-in-out;">
             <div class="row gx-3">
                 // Left Column: Index & Checkbox
                 <div class="col-auto d-flex flex-column align-items-center" style="width: 48px;">
-                    <div class="form-check mb-1">
-                        <input
-                            class="form-check-input flex-shrink-0"
-                            type="checkbox"
-                            checked={is_selected}
-                            onchange={onchange}
-                            style="width: 1.25em; height: 1.25em; cursor: pointer;"
-                        />
-                    </div>
+                    <input
+                        class="result-item-checkbox mb-1"
+                        type="checkbox"
+                        checked={is_selected}
+                        onchange={onchange}
+                        onclick={stop_click.clone()}
+                    />
                     <span class="text-muted small fw-medium">{index_str}</span>
                 </div>
 
@@ -76,7 +91,7 @@ pub fn item(props: &ItemProps) -> Html {
                 <div class="col">
                     // Title as prominent link
                     <h5 class="mb-1 lh-base">
-                        <a href={doi_link(props.article.doi.clone())} class="article-title-link text-decoration-none text-body fw-semibold" target="_blank" style="font-size: 1.05rem;">
+                        <a href={doi_link(props.article.doi.clone())} class="article-title-link text-decoration-none text-body fw-semibold" target="_blank" style="font-size: 1.05rem;" onclick={stop_click}>
                             {props.article.title.clone().unwrap_or_else(|| "Untitled Article".to_string())}
                         </a>
                     </h5>

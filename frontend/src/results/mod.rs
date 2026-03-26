@@ -338,7 +338,7 @@ pub fn results(props: &TableProps) -> Html {
             </div>
 
             // Modern List View
-            <div class="mb-4">
+            <div class="result-items-list">
                 { articles_slice.iter().enumerate().map(|(i, article)| html!{
                     <Item
                         key={article.doi.clone().unwrap_or_else(|| i.to_string())}
