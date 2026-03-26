@@ -56,7 +56,7 @@ pub fn item(props: &ItemProps) -> Html {
     let index_str = format!("{}.", props.index + 1);
 
     html! {
-        <div class="py-4 border-bottom" style="transition: background-color 0.15s ease-in-out;">
+        <div class="result-item py-4 px-2 border-bottom" style="transition: background-color 0.15s ease-in-out;">
             <div class="row gx-3">
                 // Left Column: Index & Checkbox
                 <div class="col-auto d-flex flex-column align-items-center" style="width: 48px;">
@@ -76,13 +76,13 @@ pub fn item(props: &ItemProps) -> Html {
                 <div class="col">
                     // Title as prominent link
                     <h5 class="mb-1 lh-base">
-                        <a href={doi_link(props.article.doi.clone())} class="text-decoration-none text-primary fw-bold" target="_blank" style="font-size: 1.3rem;">
+                        <a href={doi_link(props.article.doi.clone())} class="article-title-link text-decoration-none text-body fw-semibold" target="_blank" style="font-size: 1.05rem;">
                             {props.article.title.clone().unwrap_or_else(|| "Untitled Article".to_string())}
                         </a>
                     </h5>
 
                     // Authors
-                    <div class="mb-2 text-dark" style="font-size: 0.95rem;">
+                    <div class="mb-2 text-muted" style="font-size: 0.95rem;">
                         {props.article.first_author.clone().unwrap_or_else(|| "Unknown Author".to_string())}
                         <span class="text-muted">{" et al."}</span>
                     </div>
@@ -94,7 +94,7 @@ pub fn item(props: &ItemProps) -> Html {
                         } else {
                             html! {}
                         }}
-                        
+
                         {if props.article.journal.is_some() && props.article.year_published.is_some() {
                             html! { <span>{" • "}</span> }
                         } else {
@@ -108,7 +108,7 @@ pub fn item(props: &ItemProps) -> Html {
                         }}
 
                         {if let Some(doi) = &props.article.doi {
-                            html! { 
+                            html! {
                                 <>
                                     <span>{" • "}</span>
                                     <span>{"doi: "}{doi}</span>
@@ -121,20 +121,20 @@ pub fn item(props: &ItemProps) -> Html {
                         // Badges aligned to the right or just trailing
                         <div class="ms-md-auto d-flex gap-2 mt-2 mt-md-0">
                             {if let Some(citations) = props.article.citations {
-                                html! { 
+                                html! {
                                     <span class="badge rounded-pill bg-light text-dark border align-items-center d-flex gap-1" title="Citations">
                                         <i class="bi bi-quote small"></i> {citations}
-                                    </span> 
+                                    </span>
                                 }
                             } else {
                                 html! {}
                             }}
-                            
+
                             {if let Some(score) = props.article.score {
-                                html! { 
-                                    <span class="badge rounded-pill bg-light text-dark border align-items-center d-flex gap-1" title="Score">
+                                html! {
+                                    <span class="badge rounded-pill bg-light text-muted border align-items-center d-flex gap-1" title="Score">
                                         <i class="bi bi-star-fill text-warning small"></i> {score}
-                                    </span> 
+                                    </span>
                                 }
                             } else {
                                 html! {}
@@ -149,7 +149,7 @@ pub fn item(props: &ItemProps) -> Html {
                             let truncated: String = summary.chars().take(250).collect();
                             html! {
                                 <div class="text-secondary" style="font-size: 0.95rem; line-height: 1.5;">
-                                    <span class="fw-semibold text-dark">{"ABSTRACT: "}</span>
+                                    <span class="fw-semibold text-muted">{"ABSTRACT: "}</span>
                                     {truncated}{"..."}
                                     <button class="btn btn-link btn-sm p-0 ms-1 text-decoration-none" onclick={toggle_expanded.clone()}>
                                         {"Show more"} <i class="bi bi-chevron-down ms-1"></i>
@@ -159,7 +159,7 @@ pub fn item(props: &ItemProps) -> Html {
                         } else {
                             html! {
                                 <div class="text-secondary" style="font-size: 0.95rem; line-height: 1.5;">
-                                    <span class="fw-semibold text-dark">{"ABSTRACT: "}</span>
+                                    <span class="fw-semibold text-muted">{"ABSTRACT: "}</span>
                                     {summary}
                                     {if is_long {
                                         html! {

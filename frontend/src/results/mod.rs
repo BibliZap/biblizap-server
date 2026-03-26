@@ -265,10 +265,10 @@ pub fn results(props: &TableProps) -> Html {
 
     html! {
         <div id="table" class="container-fluid py-4">
-            <div class="row mb-4 align-items-center bg-light p-3 rounded border">
+            <div class="row mb-4 align-items-center bg-light-subtle p-3 rounded border">
                 <div class="col-md-5 mb-3 mb-md-0">
                     <div class="input-group">
-                        <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                        <span class="input-group-text bg-body-secondary"><i class="bi bi-search"></i></span>
                         <input type="text" class="form-control" placeholder="Search across all fields..." oninput={
                             let filter = global_filter.clone();
                             Callback::from(move |e: InputEvent| {

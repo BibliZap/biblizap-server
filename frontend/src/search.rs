@@ -250,7 +250,7 @@ pub fn biblizap_search_bar(props: &SearchBarProps) -> Html {
                         value={id_list.to_string()}
                     />
                     <SearchGear show_advanced={show_advanced.clone()} />
-                    <button type="submit" class="btn btn-primary">
+                    <button type="submit" class="btn btn-outline-primary">
                         <i class="bi bi-search"></i>
                         {" Search"}
                     </button>

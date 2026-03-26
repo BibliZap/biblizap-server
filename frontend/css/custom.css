@@ -118,6 +118,18 @@ table thead th {
     vertical-align: middle;
 }
 
+/* Article title link */
+.article-title-link {
+    color: #1a4e8a;
+    transition: color 0.2s ease, text-decoration-color 0.2s ease;
+    text-decoration: none;
+}
+
+.article-title-link:hover {
+    color: #3a6ea8 !important;
+    text-decoration: underline !important;
+}
+
 table thead th strong {
     font-weight: 600;
 }
@@ -126,4 +138,11 @@ table thead th strong {
 table tbody td {
     font-size: 0.9rem;
     padding: 0.5rem;
+}
+
+.result-item {
+    border-radius: 3em;
+    &:hover {
+        background-color: var(--bs-secondary-bg);
+    }
 }
