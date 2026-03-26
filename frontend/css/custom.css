@@ -39,6 +39,24 @@
     }
 }
 
+/* Advanced params collapsible panel */
+.advanced-params {
+    overflow: hidden;
+    max-height: 0;
+    opacity: 0;
+    transition: max-height 0.3s ease-out, opacity 0.25s ease-out;
+}
+
+.advanced-params.open {
+    max-height: 300px;
+    opacity: 1;
+    transition: max-height 0.35s ease-in, opacity 0.3s ease-in;
+}
+
+.advanced-params-inner {
+    padding-bottom: 0.5rem;
+}
+
 .results-fade-in {
     animation: fadeIn 0.35s ease-in;
     animation-delay: 0.35s;

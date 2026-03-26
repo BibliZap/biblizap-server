@@ -6,6 +6,8 @@ use std::rc::Rc;
 use yew::prelude::*;
 use yew_router::prelude::*;
 
+use crate::common::{OutputMaxSize, SearchFor};
+
 pub mod article;
 pub use article::Article;
 
@@ -399,7 +401,13 @@ pub fn results(props: &TableProps) -> Html {
 // but we leave Error handling component here.
 
 /// Fetches BibliZap snowball results for a list of IDs from the backend API.
-pub async fn run_snowball_with_ids(ids: &[String]) -> Result<Rc<RefCell<Vec<Article>>>, Error> {
+/// Expert params default to `Limit(100)`, depth 2, and `Both` when `None`.
+pub async fn run_snowball_with_ids(
+    ids: &[String],
+    depth: Option<u8>,
+    output_max_size: Option<&OutputMaxSize>,
+    search_for: Option<&SearchFor>,
+) -> Result<Rc<RefCell<Vec<Article>>>, Error> {
     use gloo_utils::document;
     let url = document().document_uri();
     let url = match url {
@@ -414,10 +422,10 @@ pub async fn run_snowball_with_ids(ids: &[String]) -> Result<Rc<RefCell<Vec<Arti
     api_url.set_path("api");
 
     let body = serde_json::json!({
-        "output_max_size": "100",
-        "depth": 2,
+        "output_max_size": output_max_size.unwrap_or(&OutputMaxSize::Limit(100)),
+        "depth": depth.unwrap_or(2),
         "input_id_list": ids,
-        "search_for": "Both"
+        "search_for": search_for.unwrap_or(&SearchFor::Both)
     });
 
     let response = gloo_net::http::Request::post(api_url.as_str())
@@ -440,22 +448,13 @@ pub async fn run_snowball_with_ids(ids: &[String]) -> Result<Rc<RefCell<Vec<Arti
     Ok(Rc::new(RefCell::new(articles)))
 }
 
-fn location_to_ids(location: &Option<Location>) -> Result<Vec<String>, Error> {
-    let ids_string = location
+fn location_to_query(
+    location: &Option<Location>,
+) -> Result<crate::common::BibliZapResultsQuery, Error> {
+    location
         .as_ref()
         .and_then(|l| l.query::<crate::common::BibliZapResultsQuery>().ok())
-        .ok_or_else(|| Error::JsValueString("Missing query parameters".to_string()))?
-        .ids;
-
-    let ids: Vec<String> = ids_string
-        .split_whitespace()
-        .map(|s| s.to_string())
-        .collect();
-
-    if ids.is_empty() {
-        return Err(Error::NoValidIds);
-    }
-    Ok(ids)
+        .ok_or_else(|| Error::JsValueString("Missing query parameters".to_string()))
 }
 
 enum FetchStatus {
@@ -465,22 +464,33 @@ enum FetchStatus {
 }
 
 /// The BibliZap results page.
-/// Reads `?ids=` from the URL, fetches results on mount, and renders the results table.
+/// Reads `?ids=` (and optional expert params) from the URL, fetches results on mount,
+/// and renders the results table.
 /// If navigated to via the search form (history state = `FromSearch(true)`), the search
 /// bar starts centred and rises to the top via a CSS transition on the next paint.
 /// On direct/bookmarked access it starts at the top immediately.
 #[function_component(BibliZapResults)]
 pub fn biblizap_results() -> Html {
     use crate::common::{BibliZapResultsQuery, FormPosition, Route};
-    use crate::search::BiblizapSearchBar;
+    use crate::search::{AdvancedParams, BiblizapSearchBar};
 
     let location = use_location();
     let navigator = use_navigator().unwrap();
 
-    let ids: Vec<String> = location_to_ids(&location).unwrap_or_else(|_| {
+    let Ok(query) = location_to_query(&location) else {
         navigator.replace(&Route::BibliZapSearch);
-        vec![]
-    });
+        return html! {};
+    };
+
+    let ids: Vec<String> = query
+        .ids
+        .split_whitespace()
+        .map(|s| s.to_string())
+        .collect();
+    if ids.is_empty() {
+        navigator.replace(&Route::BibliZapSearch);
+        return html! {};
+    }
 
     // Only animate when explicitly navigated from the search form.
     let form_position = location
@@ -496,13 +506,27 @@ pub fn biblizap_results() -> Html {
     {
         let fetch_status = fetch_status.clone();
         let ids = ids.clone();
-        // Depend on the ids string, not on `location` (Location doesn't impl PartialEq,
-        // so using it as a dep causes the effect to re-run on every render).
-        let ids_key = ids.join(" ");
-        use_effect_with(ids_key, move |_| {
+        let depth = query.depth;
+        let output_max_size = query.output_max_size.clone();
+        let search_for = query.search_for.clone();
+        // Depend on the full query string so re-navigating with different params re-fetches.
+        let query_key = format!(
+            "{} {:?} {:?} {:?}",
+            ids.join(" "),
+            depth,
+            output_max_size,
+            search_for
+        );
+        use_effect_with(query_key, move |_| {
             fetch_status.set(FetchStatus::Loading);
             wasm_bindgen_futures::spawn_local(async move {
-                let result = run_snowball_with_ids(&ids).await;
+                let result = run_snowball_with_ids(
+                    &ids,
+                    depth,
+                    output_max_size.as_ref(),
+                    search_for.as_ref(),
+                )
+                .await;
                 match result {
                     Ok(articles) => fetch_status.set(FetchStatus::Success(articles)),
                     Err(e) => fetch_status.set(FetchStatus::Error(e)),
@@ -512,13 +536,22 @@ pub fn biblizap_results() -> Html {
         });
     }
 
+    // Preserve current page's expert params when re-running on a selection.
     let on_run_snowball = {
         let navigator = navigator.clone();
+        let depth = query.depth;
+        let output_max_size = query.output_max_size.clone();
+        let search_for = query.search_for.clone();
         Callback::from(move |ids: Vec<String>| {
             let ids_str = ids.join(" ");
             let _ = navigator.push_with_query(
                 &Route::BibliZapResults,
-                &BibliZapResultsQuery { ids: ids_str },
+                &BibliZapResultsQuery {
+                    ids: ids_str,
+                    depth,
+                    output_max_size: output_max_size.clone(),
+                    search_for: search_for.clone(),
+                },
             );
         })
     };
@@ -537,7 +570,11 @@ pub fn biblizap_results() -> Html {
     html! {
         <div>
             <div class={form_class}>
-                <BiblizapSearchBar position={FormPosition::Top} value={ids.join(" ")} />
+                <BiblizapSearchBar
+                    position={FormPosition::Top}
+                    value={ids.join(" ")}
+                    advanced={Some(AdvancedParams::from(&query))}
+                />
             </div>
             <div class="results-fade-in">
                 {content}

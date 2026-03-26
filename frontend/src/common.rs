@@ -67,6 +67,15 @@ impl From<JsValue> for Error {
 pub struct BibliZapResultsQuery {
     /// Space-separated list of DOIs / PMIDs.
     pub ids: String,
+    /// Snowball depth (1 or 2). Defaults to 2 when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub depth: Option<u8>,
+    /// Max number of output results. Defaults to `Limit(100)` when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_max_size: Option<OutputMaxSize>,
+    /// Search direction. Defaults to `Both` when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub search_for: Option<SearchFor>,
 }
 
 /// Prop for `SnowballForm` indicating the form's current position.
@@ -119,12 +128,47 @@ pub enum Route {
 }
 
 /// Enum representing the direction of the snowball search.
-#[derive(Clone, PartialEq, Default, Debug, serde::Serialize)]
+#[derive(Clone, Copy, PartialEq, Default, Debug, serde::Serialize, serde::Deserialize)]
 pub enum SearchFor {
     References,
     Citations,
     #[default]
     Both,
+}
+
+/// Enum representing the maximum number of output results.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum OutputMaxSize {
+    Limit(usize),
+    All,
+}
+
+impl Default for OutputMaxSize {
+    fn default() -> Self {
+        OutputMaxSize::Limit(100)
+    }
+}
+
+impl serde::Serialize for OutputMaxSize {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            OutputMaxSize::All => serializer.serialize_str("All"),
+            OutputMaxSize::Limit(n) => serializer.serialize_str(&n.to_string()),
+        }
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for OutputMaxSize {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(deserializer)?;
+        match s.as_str() {
+            "All" => Ok(OutputMaxSize::All),
+            n => n
+                .parse::<usize>()
+                .map(OutputMaxSize::Limit)
+                .map_err(serde::de::Error::custom),
+        }
+    }
 }
 
 /// Helper function to get the value from an HTML input element referenced by a NodeRef.
