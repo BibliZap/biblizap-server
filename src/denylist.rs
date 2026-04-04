@@ -1,5 +1,37 @@
 use std::collections::BTreeSet;
 
+use actix_web::{HttpResponse, Responder, web};
+
+use crate::AppConfig;
+
+pub async fn upload_denylist(req_body: String, config: web::Data<AppConfig>) -> impl Responder {
+    let denylist = DenyList::from_flat_string(&req_body);
+    let hash = denylist.save_to_database(&config.database_pool).await;
+    match hash {
+        Ok(hash) => HttpResponse::Ok().body(hex::encode(hash)),
+        Err(e) => HttpResponse::InternalServerError().body(format!("Failed to save DenyList: {e}")),
+    }
+}
+
+pub async fn download_denylist(hash_hex: String, config: web::Data<AppConfig>) -> impl Responder {
+    let hash_bytes = match hex::decode(&hash_hex) {
+        Ok(bytes) if bytes.len() == 32 => {
+            let mut hash_array = [0u8; 32];
+            hash_array.copy_from_slice(&bytes);
+            hash_array
+        }
+        _ => return HttpResponse::BadRequest().body("Invalid hash format"),
+    };
+
+    match DenyList::load_from_database(&config.database_pool, &hash_bytes).await {
+        Ok(denylist) => HttpResponse::Ok().body(denylist.to_flat_string()),
+        Err(DenyListError::DatabaseError(sqlx::Error::RowNotFound)) => {
+            HttpResponse::NotFound().body("Denylist not found")
+        }
+        Err(e) => HttpResponse::InternalServerError().body(format!("Failed to load DenyList: {e}")),
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum DenyListError {
     #[error("Database error: {0}")]
@@ -14,7 +46,7 @@ struct Doi(String);
 impl Doi {
     fn new(doi: &str) -> Option<Self> {
         let normalized = doi.trim().to_lowercase();
-        normalized.starts_with("10.").then(|| Doi(normalized))
+        crate::common::is_valid_doi(&normalized).then(|| Doi(normalized))
     }
 }
 
@@ -24,13 +56,7 @@ struct DenyList {
 }
 
 impl DenyList {
-    pub fn new() -> Self {
-        DenyList {
-            dois: BTreeSet::new(),
-        }
-    }
-
-    pub fn from_flat_string(&self) -> String {
+    pub fn to_flat_string(&self) -> String {
         self.dois
             .iter()
             .map(|doi| doi.0.clone())
@@ -38,7 +64,7 @@ impl DenyList {
             .join("\n")
     }
 
-    pub fn to_flat_string(flat: &str) -> Self {
+    pub fn from_flat_string(flat: &str) -> Self {
         let dois = flat
             .lines()
             .filter_map(|line| Doi::new(line))
@@ -58,7 +84,7 @@ impl DenyList {
 
     pub fn compress(&self) -> Result<Vec<u8>, DenyListError> {
         use zstd::stream::encode_all;
-        let flat_string = self.from_flat_string();
+        let flat_string = self.to_flat_string();
         Ok(encode_all(flat_string.as_bytes(), 0)?)
     }
 }
@@ -130,7 +156,7 @@ impl DenyList {
         let flat_string = String::from_utf8(decompressed_data).map_err(|e| {
             DenyListError::CompressionError(std::io::Error::new(std::io::ErrorKind::InvalidData, e))
         })?;
-        Ok(DenyList::to_flat_string(&flat_string))
+        Ok(DenyList::from_flat_string(&flat_string))
     }
 }
 
@@ -195,7 +221,7 @@ mod tests {
     #[test]
     fn serialize_deserialize_roundtrip() {
         let original = make(&["10.1016/j.cell.2020", "10.1038/s41586-021"]);
-        let roundtripped = DenyList::to_flat_string(&original.from_flat_string());
+        let roundtripped = DenyList::from_flat_string(&original.to_flat_string());
         assert_eq!(original.sha256(), roundtripped.sha256());
     }
 

@@ -544,6 +544,7 @@ dependencies = [
  "crc32fast",
  "dotenvy",
  "env_logger",
+ "hex",
  "log",
  "num_cpus",
  "reqwest",
