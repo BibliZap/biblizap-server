@@ -7,6 +7,7 @@ use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
 
+mod denylist;
 mod tracking;
 
 // Includes the generated code for static files (frontend build).
