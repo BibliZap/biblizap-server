@@ -64,14 +64,14 @@ pub fn spinner() -> Html {
 
 /// Properties for the Results (Table) component.
 #[derive(Clone, PartialEq, Properties)]
-pub struct TableProps {
+pub struct ResultsProps {
     articles: Rc<RefCell<Vec<Article>>>,
     on_run_snowball: Callback<Vec<String>>,
 }
 
 /// Component for displaying the search results in a table.
 #[function_component(Results)]
-pub fn results(props: &TableProps) -> Html {
+pub fn results(props: &ResultsProps) -> Html {
     let selected_articles = use_state(|| Rc::new(RefCell::new(HashSet::<String>::new())));
 
     let update_selected = {
