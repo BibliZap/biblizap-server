@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashSet, rc::Rc};
+use std::collections::HashSet;
 use yew::prelude::*;
 
 use super::Article;
@@ -9,13 +9,13 @@ pub struct ItemProps {
     pub article: Article,
     pub index: usize,
     pub update_selected: Callback<(String, bool)>,
-    pub selected_articles: Rc<RefCell<HashSet<String>>>,
+    pub selected_articles: HashSet<String>,
 }
 
 /// Component for a single item in the modern results list.
 /// Displays article information in a clean, PubMed-inspired layout.
-#[function_component(Item)]
-pub fn item(props: &ItemProps) -> Html {
+#[function_component]
+pub fn Item(props: &ItemProps) -> Html {
     let expanded = use_state(|| false);
 
     fn doi_link(doi: Option<String>) -> Option<String> {
@@ -27,7 +27,7 @@ pub fn item(props: &ItemProps) -> Html {
         .article
         .doi
         .as_ref()
-        .map(|doi| props.selected_articles.borrow().contains(doi))
+        .map(|doi| props.selected_articles.contains(doi))
         .unwrap_or(false);
 
     let onchange = {

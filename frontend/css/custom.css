@@ -209,3 +209,8 @@ table tbody td {
     outline: none;
     box-shadow: 0 0 0 0.2rem rgba(var(--bs-primary-rgb), 0.25);
 }
+
+.download-buttons {
+    display: flex;
+    gap: 0.5rem;
+}

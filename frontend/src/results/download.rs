@@ -1,3 +1,8 @@
+use std::cell::RefCell;
+use std::collections::HashSet;
+use std::ops::Deref;
+use std::rc::Rc;
+
 use wasm_bindgen::prelude::*;
 use web_sys::HtmlElement;
 use yew::prelude::*;
@@ -122,8 +127,20 @@ pub fn to_bibtex(articles: &[Article]) -> Result<Vec<u8>, common::Error> {
             "{}{}-{}-{}",
             article.first_author.clone().unwrap_or_default(),
             article.year_published.unwrap_or_default(),
-            article.journal.clone().unwrap_or_default().chars().take(6).collect::<String>(),
-            article.title.clone().unwrap_or_default().chars().take(6).collect::<String>()
+            article
+                .journal
+                .clone()
+                .unwrap_or_default()
+                .chars()
+                .take(6)
+                .collect::<String>(),
+            article
+                .title
+                .clone()
+                .unwrap_or_default()
+                .chars()
+                .take(6)
+                .collect::<String>()
         );
         writeln!(bibtex, "@article{{{},", citeid)?;
         if let Some(author) = &article.first_author {
@@ -169,6 +186,116 @@ pub fn download_bytes_as_file(bytes: &[u8], filename: &str) -> Result<(), common
     Ok(())
 }
 
+#[derive(Clone, PartialEq, Properties)]
+pub struct ButtonsProps {
+    pub articles: Rc<RefCell<Vec<Article>>>,
+    pub selected_articles: HashSet<String>,
+}
+
+pub fn get_articles_to_download(
+    articles: &Rc<RefCell<Vec<Article>>>,
+    selected_articles: &HashSet<String>,
+) -> Vec<Article> {
+    let articles = articles.borrow();
+
+    if selected_articles.is_empty() {
+        articles.clone()
+    } else {
+        articles
+            .iter()
+            .filter(|article| {
+                if let Some(doi) = &article.doi {
+                    selected_articles.contains(doi)
+                } else {
+                    false
+                }
+            })
+            .cloned()
+            .collect()
+    }
+}
+
+#[function_component]
+pub fn DownloadButtons(
+    ButtonsProps {
+        articles,
+        selected_articles,
+    }: &ButtonsProps,
+) -> Html {
+    let on_excel_download_click = {
+        let articles = articles.clone();
+        let selected_articles = selected_articles.clone();
+        Callback::from(move |_: MouseEvent| {
+            let articles_to_download = get_articles_to_download(&articles, &selected_articles);
+            let bytes = to_excel(&articles_to_download).unwrap();
+            let timestamp = chrono::Local::now().to_rfc3339();
+            let suffix = if articles_to_download.len() == articles.deref().borrow().len() {
+                "all"
+            } else {
+                "selected"
+            };
+
+            match download_bytes_as_file(&bytes, &format!("BibliZap-{suffix}-{timestamp}.xlsx")) {
+                Ok(_) => (),
+                Err(error) => {
+                    gloo_console::log!(format!("{error}"));
+                }
+            }
+        })
+    };
+
+    let on_ris_download_click = {
+        let articles = articles.clone();
+        let selected_articles = selected_articles.clone();
+        Callback::from(move |_: MouseEvent| {
+            let articles_to_download = get_articles_to_download(&articles, &selected_articles);
+            let bytes = to_ris(&articles_to_download).unwrap();
+            let timestamp = chrono::Local::now().to_rfc3339();
+            let suffix = if articles_to_download.len() == articles.deref().borrow().len() {
+                "all"
+            } else {
+                "selected"
+            };
+
+            match download_bytes_as_file(&bytes, &format!("BibliZap-{suffix}-{timestamp}.ris")) {
+                Ok(_) => (),
+                Err(error) => {
+                    gloo_console::log!(format!("{error}"));
+                }
+            }
+        })
+    };
+
+    let on_bibtex_download_click = {
+        let articles = articles.clone();
+        let selected_articles = selected_articles.clone();
+        Callback::from(move |_: MouseEvent| {
+            let articles_to_download = get_articles_to_download(&articles, &selected_articles);
+            let bytes = to_bibtex(&articles_to_download).unwrap();
+            let timestamp = chrono::Local::now().to_rfc3339();
+            let suffix = if articles_to_download.len() == articles.deref().borrow().len() {
+                "all"
+            } else {
+                "selected"
+            };
+
+            match download_bytes_as_file(&bytes, &format!("BibliZap-{suffix}-{timestamp}.bib")) {
+                Ok(_) => (),
+                Err(error) => {
+                    gloo_console::log!(format!("{error}"));
+                }
+            }
+        })
+    };
+    html! {
+        <div class="download-buttons">
+            <DownloadButton onclick={on_excel_download_click} label="Excel"/>
+            <DownloadButton onclick={on_ris_download_click} label="RIS"/>
+            <DownloadButton onclick={on_bibtex_download_click} label="BibTeX"/>
+        </div>
+    }
+}
+
 /// Properties for the DownloadButton component.
 #[derive(Clone, PartialEq, Properties)]
 pub struct ButtonProps {
@@ -177,8 +304,8 @@ pub struct ButtonProps {
 }
 
 /// Component for the download button.
-#[function_component(DownloadButton)]
-pub fn download_button(props: &ButtonProps) -> Html {
+#[function_component]
+pub fn DownloadButton(props: &ButtonProps) -> Html {
     html! {
         <div>
             <button class="btn btn-outline-secondary btn-lg mb-10" onclick={props.onclick.clone()}><i class="bi bi-download me-2"></i>{&props.label}</button>

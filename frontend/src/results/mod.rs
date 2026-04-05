@@ -70,18 +70,18 @@ pub struct ResultsProps {
 }
 
 /// Component for displaying the search results in a table.
-#[function_component(Results)]
-pub fn results(props: &ResultsProps) -> Html {
-    let selected_articles = use_state(|| Rc::new(RefCell::new(HashSet::<String>::new())));
+#[function_component]
+pub fn Results(props: &ResultsProps) -> Html {
+    let selected_articles = use_state(|| HashSet::<String>::new());
 
     let update_selected = {
         let selected_articles = selected_articles.clone();
         Callback::from(move |element: (String, bool)| {
-            let current_selected = (*selected_articles).clone();
+            let mut current_selected = (*selected_articles).clone();
             if element.1 {
-                current_selected.borrow_mut().insert(element.0);
+                current_selected.insert(element.0);
             } else {
-                current_selected.borrow_mut().remove(&element.0);
+                current_selected.remove(&element.0);
             }
             selected_articles.set(current_selected);
         })
@@ -106,104 +106,12 @@ pub fn results(props: &ResultsProps) -> Html {
         .cloned()
         .collect::<Vec<_>>();
 
-    // Helper function to get articles to download
-    let get_articles_to_download = {
-        let articles = articles.clone();
-        let selected_articles = selected_articles.clone();
-        move || -> Vec<Article> {
-            if selected_articles.borrow().is_empty() {
-                // If nothing selected, return all articles
-                articles.deref().borrow().clone()
-            } else {
-                // Return only selected articles
-                articles
-                    .deref()
-                    .borrow()
-                    .iter()
-                    .filter(|article| {
-                        article
-                            .doi
-                            .as_ref()
-                            .map(|doi| selected_articles.borrow().contains(doi))
-                            .unwrap_or(false)
-                    })
-                    .cloned()
-                    .collect()
-            }
-        }
-    };
-
-    let on_excel_download_click = {
-        let get_articles = get_articles_to_download.clone();
-        let articles = articles.clone();
-        Callback::from(move |_: MouseEvent| {
-            let articles_to_download = get_articles();
-            let bytes = to_excel(&articles_to_download).unwrap();
-            let timestamp = chrono::Local::now().to_rfc3339();
-            let suffix = if articles_to_download.len() == articles.deref().borrow().len() {
-                "all"
-            } else {
-                "selected"
-            };
-
-            match download_bytes_as_file(&bytes, &format!("BibliZap-{suffix}-{timestamp}.xlsx")) {
-                Ok(_) => (),
-                Err(error) => {
-                    gloo_console::log!(format!("{error}"));
-                }
-            }
-        })
-    };
-
-    let on_ris_download_click = {
-        let get_articles = get_articles_to_download.clone();
-        let articles = articles.clone();
-        Callback::from(move |_: MouseEvent| {
-            let articles_to_download = get_articles();
-            let bytes = to_ris(&articles_to_download).unwrap();
-            let timestamp = chrono::Local::now().to_rfc3339();
-            let suffix = if articles_to_download.len() == articles.deref().borrow().len() {
-                "all"
-            } else {
-                "selected"
-            };
-
-            match download_bytes_as_file(&bytes, &format!("BibliZap-{suffix}-{timestamp}.ris")) {
-                Ok(_) => (),
-                Err(error) => {
-                    gloo_console::log!(format!("{error}"));
-                }
-            }
-        })
-    };
-
-    let on_bibtex_download_click = {
-        let get_articles = get_articles_to_download.clone();
-        let articles = articles.clone();
-        Callback::from(move |_: MouseEvent| {
-            let articles_to_download = get_articles();
-            let bytes = to_bibtex(&articles_to_download).unwrap();
-            let timestamp = chrono::Local::now().to_rfc3339();
-            let suffix = if articles_to_download.len() == articles.deref().borrow().len() {
-                "all"
-            } else {
-                "selected"
-            };
-
-            match download_bytes_as_file(&bytes, &format!("BibliZap-{suffix}-{timestamp}.bib")) {
-                Ok(_) => (),
-                Err(error) => {
-                    gloo_console::log!(format!("{error}"));
-                }
-            }
-        })
-    };
-
     let on_rerun_click = {
-        let get_articles = get_articles_to_download.clone();
+        let articles = props.articles.clone();
+        let selected_articles = selected_articles.clone();
         let on_run_snowball = props.on_run_snowball.clone();
         Callback::from(move |_: MouseEvent| {
-            let articles_to_download = get_articles();
+            let articles_to_download = get_articles_to_download(&articles, &selected_articles);
             let ids: Vec<String> = articles_to_download
                 .iter()
                 .filter_map(|a| a.doi.clone())
@@ -213,9 +121,10 @@ pub fn results(props: &ResultsProps) -> Html {
     };
 
     let on_copy_click = {
-        let get_articles = get_articles_to_download.clone();
+        let articles = props.articles.clone();
+        let selected_articles = selected_articles.clone();
         Callback::from(move |_: MouseEvent| {
-            let articles = get_articles();
+            let articles = get_articles_to_download(&articles, &selected_articles);
             let mut ids: Vec<String> = articles.into_iter().filter_map(|a| a.doi).collect();
             ids.sort();
             ids.dedup();
@@ -368,13 +277,13 @@ pub fn results(props: &ResultsProps) -> Html {
 
             <div class="mt-5 p-3 bg-light border rounded d-flex gap-3 align-items-center flex-wrap shadow-sm">
                 <h5>{
-                    if selected_articles.borrow().is_empty() {
+                    if selected_articles.is_empty() {
                         "Download all articles:".to_string()
                     } else {
-                        format!("Selected ({}) actions:", selected_articles.borrow().len())
+                        format!("Selected ({}) actions:", selected_articles.len())
                     }
                 }</h5>
-                {if !selected_articles.borrow().is_empty() {
+                {if !selected_articles.is_empty() {
                     html! {
                         <>
                             <button class="btn btn-primary" onclick={on_rerun_click}>
@@ -389,10 +298,8 @@ pub fn results(props: &ResultsProps) -> Html {
                 } else {
                     html! {}
                 }}
-                <DownloadButton onclick={on_excel_download_click} label="Excel"/>
-                <DownloadButton onclick={on_ris_download_click} label="RIS"/>
-                <DownloadButton onclick={on_bibtex_download_click} label="BibTeX"/>
-            </div>
+                    <DownloadButtons articles={articles.clone()} selected_articles={(*selected_articles).clone()} />
+                </div>
         </div>
     }
 }
