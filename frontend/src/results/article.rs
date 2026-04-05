@@ -1,7 +1,5 @@
 use serde::{Deserialize, Serialize};
 
-use crate::results::Filters;
-
 /// Struct representing an academic article with relevant metadata.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
 pub struct Article {
@@ -47,29 +45,5 @@ impl Article {
             | self
                 .citations
                 .map_or(false, |x| x.to_string().contains(&pattern_lowercase))
-    }
-
-    /// Checks if the article matches all the provided filters (case-insensitive for strings).
-    pub fn matches(&self, filters: &Filters) -> bool {
-        self.doi.as_ref().map_or(false, |x| {
-            x.to_lowercase().contains(&filters.doi.to_lowercase())
-        }) & self.title.as_ref().map_or(false, |x| {
-            x.to_lowercase().contains(&filters.title.to_lowercase())
-        }) & self.journal.as_ref().map_or(false, |x| {
-            x.to_lowercase().contains(&filters.journal.to_lowercase())
-        }) & self.summary.as_ref().map_or(false, |x| {
-            x.to_lowercase().contains(&filters.summary.to_lowercase())
-        }) & self.first_author.as_ref().map_or(false, |x| {
-            x.to_lowercase()
-                .contains(&filters.first_author.to_lowercase())
-        }) & self
-            .year_published
-            .map_or(false, |x| x.to_string().contains(&filters.year_published))
-            & self
-                .score
-                .map_or(false, |x| x.to_string().contains(&filters.score))
-            & self
-                .citations
-                .map_or(false, |x| x.to_string().contains(&filters.citations))
     }
 }

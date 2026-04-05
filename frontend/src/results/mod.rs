@@ -11,9 +11,6 @@ use crate::common::{OutputMaxSize, SearchFor};
 pub mod article;
 pub use article::Article;
 
-mod filter;
-use filter::Filters;
-
 mod download;
 use download::*;
 
@@ -89,8 +86,6 @@ pub fn Results(props: &ResultsProps) -> Html {
 
     let articles = props.articles.to_owned();
     let global_filter = use_state(|| "".to_string());
-    let filters = use_mut_ref(Filters::default);
-    let filters = use_state(|| filters);
 
     // Track sort state for each sortable column
     let sort_year = use_state(|| SortState::None);
@@ -102,7 +97,6 @@ pub fn Results(props: &ResultsProps) -> Html {
         .borrow()
         .iter()
         .filter(|a| a.matches_global(&global_filter))
-        .filter(|a| a.matches(&filters.deref().borrow()))
         .cloned()
         .collect::<Vec<_>>();
 
