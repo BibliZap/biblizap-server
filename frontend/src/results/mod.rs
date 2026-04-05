@@ -22,32 +22,6 @@ use organize::*;
 
 use crate::common::Error;
 
-/// Enum representing the sort state of a column.
-#[derive(Clone, Copy, PartialEq, Debug)]
-enum SortState {
-    None,
-    Ascending,
-    Descending,
-}
-
-impl SortState {
-    fn next(&self) -> Self {
-        match self {
-            SortState::None => SortState::Ascending,
-            SortState::Ascending => SortState::Descending,
-            SortState::Descending => SortState::None,
-        }
-    }
-
-    fn icon(&self) -> &'static str {
-        match self {
-            SortState::None => "bi-chevron-expand",
-            SortState::Ascending => "bi-chevron-up",
-            SortState::Descending => "bi-chevron-down",
-        }
-    }
-}
-
 /// Component for displaying a loading spinner.
 #[function_component(Spinner)]
 pub fn spinner() -> Html {
@@ -89,11 +63,6 @@ pub fn Results(props: &ResultsProps) -> Html {
 
     let articles = props.articles.to_owned();
     let global_filter = use_state(|| "".to_string());
-
-    // Track sort state for each sortable column
-    let sort_year = use_state(|| SortState::None);
-    let sort_citations = use_state(|| SortState::None);
-    let sort_score = use_state(|| SortState::None);
 
     let articles_to_display = articles
         .deref()
@@ -166,63 +135,7 @@ pub fn Results(props: &ResultsProps) -> Html {
                         global_filter.set(value);
                     })
                 } />
-                <div class="col-md-7 d-flex justify-content-md-end gap-2 flex-wrap">
-                    <span class="align-self-center fw-semibold text-secondary me-2">{"Sort by:"}</span>
-                    <button class={classes!("btn", "btn-sm", if *sort_year != SortState::None { "btn-primary" } else { "btn-outline-secondary" })} onclick={
-                        let articles = props.articles.clone();
-                        let redraw_table = redraw_table.clone();
-                        let sort_year = sort_year.clone();
-                        Callback::from(move |_: MouseEvent| {
-                            let new_state = (*sort_year).next();
-                            sort_year.set(new_state);
-                            let mut ref_vec = articles.deref().borrow_mut();
-                            match new_state {
-                                SortState::None => ref_vec.sort_by_key(|a| std::cmp::Reverse(a.score.clone().unwrap_or_default())),
-                                SortState::Ascending => ref_vec.sort_by_key(|a| a.year_published.clone().unwrap_or_default()),
-                                SortState::Descending => ref_vec.sort_by_key(|a| std::cmp::Reverse(a.year_published.clone().unwrap_or_default())),
-                            }
-                            redraw_table.emit(());
-                        })
-                    }>
-                        <i class="bi bi-calendar me-1"></i> {"Year"} {if *sort_year != SortState::None { html! {<i class={classes!("bi", sort_year.icon())}></i>} } else { html!{} }}
-                    </button>
-                    <button class={classes!("btn", "btn-sm", if *sort_citations != SortState::None { "btn-primary" } else { "btn-outline-secondary" })} onclick={
-                        let articles = props.articles.clone();
-                        let redraw_table = redraw_table.clone();
-                        let sort_citations = sort_citations.clone();
-                        Callback::from(move |_: MouseEvent| {
-                            let new_state = (*sort_citations).next();
-                            sort_citations.set(new_state);
-                            let mut ref_vec = articles.deref().borrow_mut();
-                            match new_state {
-                                SortState::None => ref_vec.sort_by_key(|a| std::cmp::Reverse(a.score.clone().unwrap_or_default())),
-                                SortState::Ascending => ref_vec.sort_by_key(|a| a.citations.clone().unwrap_or_default()),
-                                SortState::Descending => ref_vec.sort_by_key(|a| std::cmp::Reverse(a.citations.clone().unwrap_or_default())),
-                            }
-                            redraw_table.emit(());
-                        })
-                    }>
-                        <i class="bi bi-quote me-1"></i> {"Citations"} {if *sort_citations != SortState::None { html! {<i class={classes!("bi", sort_citations.icon())}></i>} } else { html!{} }}
-                    </button>
-                    <button class={classes!("btn", "btn-sm", if *sort_score != SortState::None { "btn-primary" } else { "btn-outline-secondary" })} onclick={
-                        let articles = props.articles.clone();
-                        let redraw_table = redraw_table.clone();
-                        let sort_score = sort_score.clone();
-                        Callback::from(move |_: MouseEvent| {
-                            let new_state = (*sort_score).next();
-                            sort_score.set(new_state);
-                            let mut ref_vec = articles.deref().borrow_mut();
-                            match new_state {
-                                SortState::None => ref_vec.sort_by_key(|a| std::cmp::Reverse(a.score.clone().unwrap_or_default())),
-                                SortState::Ascending => ref_vec.sort_by_key(|a| a.score.clone().unwrap_or_default()),
-                                SortState::Descending => ref_vec.sort_by_key(|a| std::cmp::Reverse(a.score.clone().unwrap_or_default())),
-                            }
-                            redraw_table.emit(());
-                        })
-                    }>
-                        <i class="bi bi-star-fill me-1"></i> {"Score"} {if *sort_score != SortState::None { html! {<i class={classes!("bi", sort_score.icon())}></i>} } else { html!{} }}
-                    </button>
-                </div>
+                <SortButtons articles={props.articles.clone()} redraw_table={redraw_table.clone()} />
             </div>
 
             // Modern List View
