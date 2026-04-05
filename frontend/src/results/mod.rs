@@ -23,8 +23,8 @@ use organize::*;
 use crate::common::Error;
 
 /// Component for displaying a loading spinner.
-#[function_component(Spinner)]
-pub fn spinner() -> Html {
+#[function_component]
+pub fn Spinner() -> Html {
     html! {
         <div class="container-fluid mt-5">
             <div class="d-flex justify-content-center">
@@ -258,8 +258,8 @@ enum FetchStatus {
 /// If navigated to via the search form (history state = `FromSearch(true)`), the search
 /// bar starts centred and rises to the top via a CSS transition on the next paint.
 /// On direct/bookmarked access it starts at the top immediately.
-#[function_component(BibliZapResults)]
-pub fn biblizap_results() -> Html {
+#[function_component]
+pub fn BibliZapResults() -> Html {
     use crate::common::{BibliZapResultsQuery, FormPosition, Route};
     use crate::search::{AdvancedParams, BiblizapSearchBar};
 
@@ -379,8 +379,8 @@ pub struct ErrorProps {
 }
 
 /// Component for displaying an error message.
-#[function_component(ErrorMessage)]
-pub fn error(props: &ErrorProps) -> Html {
+#[function_component]
+pub fn ErrorMessage(props: &ErrorProps) -> Html {
     html! {
         <div class="container-fluid">
             <div class="alert alert-danger" role="alert">
