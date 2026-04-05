@@ -17,6 +17,9 @@ use download::*;
 mod item;
 use item::Item;
 
+mod organize;
+use organize::*;
+
 use crate::common::Error;
 
 /// Enum representing the sort state of a column.
@@ -148,39 +151,21 @@ pub fn Results(props: &ResultsProps) -> Html {
         })
     };
 
-    let on_load_more = {
+    let update_display_limit = {
         let display_limit = display_limit.clone();
-        Callback::from(move |e: MouseEvent| {
-            e.prevent_default();
-
-            // Blur the button to prevent the browser from automatically scrolling
-            // down to keep the focused button in the viewport.
-            use wasm_bindgen::JsCast;
-            if let Some(target) = e.target() {
-                if let Ok(element) = target.dyn_into::<web_sys::HtmlElement>() {
-                    let _ = element.blur();
-                }
-            }
-
-            display_limit.set(*display_limit + 20);
+        Callback::from(move |additional_limit: usize| {
+            display_limit.set(*display_limit + additional_limit);
         })
     };
 
     html! {
         <div id="table" class="container-fluid py-4">
             <div class="row mb-4 align-items-center bg-light-subtle p-3 rounded border">
-                <div class="col-md-5 mb-3 mb-md-0">
-                    <div class="input-group">
-                        <span class="input-group-text bg-body-secondary"><i class="bi bi-search"></i></span>
-                        <input type="text" class="form-control" placeholder="Search across all fields..." oninput={
-                            let filter = global_filter.clone();
-                            Callback::from(move |e: InputEvent| {
-                                let input: web_sys::HtmlInputElement = e.target_unchecked_into();
-                                filter.set(input.value());
-                            })
-                        } />
-                    </div>
-                </div>
+                <GlobalFilter on_name_entry={
+                    Callback::from(move |value: String| {
+                        global_filter.set(value);
+                    })
+                } />
                 <div class="col-md-7 d-flex justify-content-md-end gap-2 flex-wrap">
                     <span class="align-self-center fw-semibold text-secondary me-2">{"Sort by:"}</span>
                     <button class={classes!("btn", "btn-sm", if *sort_year != SortState::None { "btn-primary" } else { "btn-outline-secondary" })} onclick={
@@ -253,21 +238,11 @@ pub fn Results(props: &ResultsProps) -> Html {
                 } ).collect::<Html>() }
             </div>
 
-            {if *display_limit < articles_to_display.len() {
-                html! {
-                    <div class="d-flex justify-content-center my-4">
-                        <button class="btn btn-outline-primary rounded-pill px-4 py-2 fw-semibold" onclick={on_load_more}>
-                            {"Load More Articles..."}
-                        </button>
-                    </div>
-                }
-            } else {
-                html! {
-                    <div class="text-center text-muted my-4 py-3 border-top">
-                        <small>{"All "}{articles_to_display.len()}{" articles displayed."}</small>
-                    </div>
-                }
-            }}
+            <LoadMoreArticlesButton
+                n_articles={articles_to_display.len()}
+                display_limit={*display_limit.clone()}
+                update_display_limit={update_display_limit.clone()}
+            />
 
             <div class="mt-5 p-3 bg-light border rounded d-flex gap-3 align-items-center flex-wrap shadow-sm">
                 <h5>{
