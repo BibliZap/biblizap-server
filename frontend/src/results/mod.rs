@@ -40,7 +40,7 @@ pub fn Spinner() -> Html {
 #[derive(Clone, PartialEq, Properties)]
 pub struct ResultsProps {
     articles: Rc<RefCell<Vec<Article>>>,
-    on_run_snowball: Callback<Vec<String>>,
+    on_rerun_snowball: Callback<Vec<String>>,
 }
 
 /// Component for displaying the search results in a table.
@@ -75,7 +75,7 @@ pub fn Results(props: &ResultsProps) -> Html {
     let on_rerun_click = {
         let articles = props.articles.clone();
         let selected_articles = selected_articles.clone();
-        let on_run_snowball = props.on_run_snowball.clone();
+        let on_run_snowball = props.on_rerun_snowball.clone();
         Callback::from(move |_: MouseEvent| {
             let articles_to_download = get_articles_to_download(&articles, &selected_articles);
             let ids: Vec<String> = articles_to_download
@@ -326,11 +326,12 @@ pub fn BibliZapResults() -> Html {
     }
 
     // Preserve current page's expert params when re-running on a selection.
-    let on_run_snowball = {
+    let on_rerun_snowball = {
         let navigator = navigator.clone();
         let depth = query.depth;
         let output_max_size = query.output_max_size.clone();
         let search_for = query.search_for.clone();
+        let denylist_hash = query.denylist_hash.clone();
         Callback::from(move |ids: Vec<String>| {
             let ids_str = ids.join(" ");
             let _ = navigator.push_with_query(
@@ -340,6 +341,7 @@ pub fn BibliZapResults() -> Html {
                     depth,
                     output_max_size: output_max_size.clone(),
                     search_for: search_for.clone(),
+                    denylist_hash: denylist_hash.clone(),
                 },
             );
         })
@@ -351,7 +353,7 @@ pub fn BibliZapResults() -> Html {
         FetchStatus::Success(articles) => html! {
             <Results
                 articles={articles}
-                on_run_snowball={on_run_snowball}
+                on_rerun_snowball={on_rerun_snowball}
             />
         },
     };

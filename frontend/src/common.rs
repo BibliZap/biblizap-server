@@ -76,6 +76,8 @@ pub struct BibliZapResultsQuery {
     /// Search direction. Defaults to `Both` when absent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub search_for: Option<SearchFor>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub denylist_hash: Option<String>,
 }
 
 /// Prop for `SnowballForm` indicating the form's current position.

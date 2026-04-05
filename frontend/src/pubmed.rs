@@ -292,7 +292,13 @@ pub fn pubmed_results_page() -> Html {
             let ids_str = ids.join(" ");
             let _ = navigator.push_with_query(
                 &Route::BibliZapResults,
-                &BibliZapResultsQuery { ids: ids_str, depth: None, output_max_size: None, search_for: None },
+                &BibliZapResultsQuery {
+                    ids: ids_str,
+                    depth: None,
+                    output_max_size: None,
+                    search_for: None,
+                    denylist_hash: None,
+                },
             );
         })
     };

@@ -231,6 +231,7 @@ pub fn biblizap_search_bar(props: &SearchBarProps) -> Html {
                         depth: Some(p.depth),
                         output_max_size: Some(p.output_max_size),
                         search_for: Some(p.search_for),
+                        denylist_hash: None, // TODO allow user to specify denylist patterns in the UI
                     },
                     position.next(),
                 );
