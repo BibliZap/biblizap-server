@@ -53,10 +53,6 @@
     transition: max-height 0.35s ease-in, opacity 0.3s ease-in;
 }
 
-.advanced-params-inner {
-    padding-bottom: 0.5rem;
-}
-
 .results-fade-in {
     animation: fadeIn 0.35s ease-in;
     animation-delay: 0.35s;
@@ -213,4 +209,16 @@ table tbody td {
 .download-buttons {
     display: flex;
     gap: 0.5rem;
+}
+
+.denylist {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    width: fit-content;
+}
+
+.denylist-loading {
+    pointer-events: none;
+    cursor: default;
 }

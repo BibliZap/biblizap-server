@@ -13,8 +13,11 @@ pub async fn upload_denylist(req_body: String, config: web::Data<AppConfig>) -> 
     }
 }
 
-pub async fn download_denylist(hash_hex: String, config: web::Data<AppConfig>) -> impl Responder {
-    let hash_bytes = match hex::decode(&hash_hex) {
+pub async fn download_denylist(
+    path: web::Path<String>,
+    config: web::Data<AppConfig>,
+) -> impl Responder {
+    let hash_bytes = match hex::decode(path.as_str()) {
         Ok(bytes) if bytes.len() == 32 => {
             let mut hash_array = [0u8; 32];
             hash_array.copy_from_slice(&bytes);

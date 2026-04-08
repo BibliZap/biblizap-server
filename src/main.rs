@@ -211,7 +211,7 @@ async fn main() -> std::io::Result<()> {
             .service(web::resource("/api").route(web::post().to(snowball_request)))
             .service(web::resource("/api/pubmed_search").route(web::post().to(pubmed_search)))
             .service(
-                web::resource("/api/denylist/download")
+                web::resource("/api/denylist/download/{hash_hex}")
                     .route(web::get().to(denylist::download_denylist)),
             )
             .service(

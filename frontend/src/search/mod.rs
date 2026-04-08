@@ -1,6 +1,10 @@
 use yew::prelude::*;
 use yew_router::prelude::*;
 
+
+mod denylist;
+use denylist::*;
+
 use crate::common::{get_value, BibliZapResultsQuery, FormPosition};
 use crate::common::*;
 
@@ -357,45 +361,46 @@ fn SearchAdvancedPanel(props: &SearchAdvancedPanelProps) -> Html {
     };
 
     html! {
-        <div class={advanced_class}>
-                <div class="advanced-params-inner">
-                    <div class="row g-3 pt-2">
-                        <div class="col-sm">
-                            <label class="form-label" for="depthSelect">{"Depth"}</label>
-                            <select class="form-select form-select-sm" id="depthSelect"
-                                value={depth_str}
-                                onchange={on_depth_change}
-                            >
-                                <option value="1" selected={advanced_params.depth == 1}>{"1"}</option>
-                                <option value="2" selected={advanced_params.depth == 2}>{"2 (recommended)"}</option>
-                            </select>
-                            <div class="form-text">{"Recommended: 2"}</div>
-                        </div>
-                        <div class="col-sm">
-                            <label class="form-label" for="maxOutputSizeSelect">{"Number of results"}</label>
-                            <select class="form-select form-select-sm" id="maxOutputSizeSelect"
-                                value={max_str}
-                                onchange={on_max_change}
-                            >
-                                <option value="100"   selected={advanced_params.output_max_size == OutputMaxSize::Limit(100)}>{"100"}</option>
-                                <option value="500"   selected={advanced_params.output_max_size == OutputMaxSize::Limit(500)}>{"500"}</option>
-                                <option value="1000"  selected={advanced_params.output_max_size == OutputMaxSize::Limit(1000)}>{"1000"}</option>
-                                <option value="All"   selected={advanced_params.output_max_size == OutputMaxSize::All}>{"All (may take longer)"}</option>
-                            </select>
-                        </div>
-                        <div class="col-sm">
-                            <label class="form-label" for="searchForSelect">{"Search direction"}</label>
-                            <select class="form-select form-select-sm" id="searchForSelect"
-                                value={sf_str}
-                                onchange={on_search_for_change}
-                            >
-                                <option value="Both"       selected={advanced_params.search_for == SearchFor::Both}>{"Both (recommended)"}</option>
-                                <option value="Citations"  selected={advanced_params.search_for == SearchFor::Citations}>{"Citations"}</option>
-                                <option value="References" selected={advanced_params.search_for == SearchFor::References}>{"References"}</option>
-                            </select>
-                        </div>
-                    </div>
+    <div class={advanced_class}>
+        <div>
+            <div class="row g-3 pt-2">
+                <div class="col-sm">
+                    <label class="form-label" for="depthSelect">{"Depth"}</label>
+                    <select class="form-select form-select-sm" id="depthSelect"
+                        value={depth_str}
+                        onchange={on_depth_change}
+                    >
+                        <option value="1" selected={advanced_params.depth == 1}>{"1"}</option>
+                        <option value="2" selected={advanced_params.depth == 2}>{"2 (recommended)"}</option>
+                    </select>
+                    <div class="form-text">{"Recommended: 2"}</div>
                 </div>
+                <div class="col-sm">
+                    <label class="form-label" for="maxOutputSizeSelect">{"Number of results"}</label>
+                    <select class="form-select form-select-sm" id="maxOutputSizeSelect"
+                        value={max_str}
+                        onchange={on_max_change}
+                    >
+                        <option value="100"   selected={advanced_params.output_max_size == OutputMaxSize::Limit(100)}>{"100"}</option>
+                        <option value="500"   selected={advanced_params.output_max_size == OutputMaxSize::Limit(500)}>{"500"}</option>
+                        <option value="1000"  selected={advanced_params.output_max_size == OutputMaxSize::Limit(1000)}>{"1000"}</option>
+                        <option value="All"   selected={advanced_params.output_max_size == OutputMaxSize::All}>{"All (may take longer)"}</option>
+                    </select>
+                </div>
+                <div class="col-sm">
+                    <label class="form-label" for="searchForSelect">{"Search direction"}</label>
+                    <select class="form-select form-select-sm" id="searchForSelect"
+                        value={sf_str}
+                        onchange={on_search_for_change}
+                    >
+                        <option value="Both"       selected={advanced_params.search_for == SearchFor::Both}>{"Both (recommended)"}</option>
+                        <option value="Citations"  selected={advanced_params.search_for == SearchFor::Citations}>{"Citations"}</option>
+                        <option value="References" selected={advanced_params.search_for == SearchFor::References}>{"References"}</option>
+                    </select>
+                </div>
+                <Denylist />
             </div>
+        </div>
+    </div>
     }
 }

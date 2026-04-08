@@ -13,7 +13,13 @@ serde_json = "1.0.107"
 thiserror = "1.0.49"
 wasm-bindgen = "0.2.87"
 wasm-bindgen-futures = "0.4.37"
-web-sys = { version = "0.3.64", features = ["Navigator", "Clipboard"] }
+web-sys = { version = "0.3.64", features = [
+    "Navigator",
+    "Clipboard",
+    "Blob",
+    "Url",
+    "HtmlElement",
+] }
 yew = { version = "0.23.0", features = ["csr"] }
 yew-router = "0.20.0"
 getrandom = { version = "0.2", features = ["js"] }
