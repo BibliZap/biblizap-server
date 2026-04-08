@@ -157,7 +157,7 @@ fn DenylistUploadButton(
         <label class="btn btn-outline-secondary btn-sm mb-0">
             <i class="bi bi-upload me-1" />
             {"Upload deny list"}
-            <input type="file" accept=".ris" hidden=true onchange={on_file_change} />
+            <input type="file" accept=".ris,.bzd" hidden=true onchange={on_file_change} />
         </label>
     }
 }
@@ -186,7 +186,7 @@ fn DenylistDisplay(props: &DenylistDisplayProps) -> Html {
     };
     let hash_hex = hex::encode(props.upload_state.hash);
     let download_href = format!("/api/denylist/download/{}", hash_hex);
-    let download_filename = format!("denylist_{}.txt", &hash_hex[..8]);
+    let download_filename = format!("denylist_{}.bzd", &hash_hex[..8]);
     html! {
         <div class="denylist btn btn-success btn-sm mb-0 d-flex align-items-center gap-2">
             <a class="text-white text-decoration-none flex-grow-1" href={download_href} download={download_filename}>
@@ -204,7 +204,7 @@ fn apply_file_read(
 ) {
     match result {
         Ok(content) => {
-            let dois = extract_dois_from_ris(&content);
+            let dois = extract_dois(&content);
             file_content.set(DenylistState::FrontendLoaded(dois.clone()));
             spawn_local(async move {
                 let hash = upload_denylist_to_backend(dois.clone()).await.unwrap();
@@ -219,15 +219,24 @@ fn apply_file_read(
     }
 }
 
-fn extract_dois_from_ris(content: &str) -> Vec<String> {
-    content
-        .lines()
-        .filter_map(|line| {
-            if line.starts_with("DO  - ") {
-                Some(line[6..].trim().to_string())
-            } else {
-                None
-            }
-        })
-        .collect()
+fn extract_dois(content: &str) -> Vec<String> {
+    // Detect RIS format by presence of field tags; otherwise treat as plain DOI list (.bzd).
+    if content.lines().any(|l| l.starts_with("DO  - ")) {
+        content
+            .lines()
+            .filter_map(|line| {
+                if line.starts_with("DO  - ") {
+                    Some(line[6..].trim().to_string())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    } else {
+        content
+            .lines()
+            .map(|l| l.trim().to_string())
+            .filter(|l| !l.is_empty())
+            .collect()
+    }
 }
