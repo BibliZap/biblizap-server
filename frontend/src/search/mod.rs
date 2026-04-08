@@ -60,6 +60,7 @@ pub struct AdvancedParams {
     pub depth: u8,
     pub output_max_size: OutputMaxSize,
     pub search_for: SearchFor,
+    pub denylist_hash: Option<[u8; 32]>,
 }
 
 impl Default for AdvancedParams {
@@ -68,6 +69,7 @@ impl Default for AdvancedParams {
             depth: 2,
             output_max_size: OutputMaxSize::default(),
             search_for: SearchFor::default(),
+            denylist_hash: None,
         }
     }
 }
@@ -78,6 +80,7 @@ impl From<&BibliZapResultsQuery> for AdvancedParams {
             depth: q.depth.unwrap_or(2),
             output_max_size: q.output_max_size.unwrap_or_default(),
             search_for: q.search_for.unwrap_or_default(),
+            denylist_hash: q.denylist_hash.clone().and_then(|s| hex::decode(&s).ok().map(|v| v.try_into().unwrap_or_default())),
         }
     }
 }
@@ -136,7 +139,9 @@ pub fn biblizap_search_bar(props: &SearchBarProps) -> Html {
                 _ => SearchFor::Both,
             })
             .unwrap_or_default();
-        AdvancedParams { depth, output_max_size, search_for }
+        let denylist_hash: Option<[u8; 32]> = session_get("bz_denylist_hash")
+            .and_then(|s| hex::decode(&s).ok().map(|v| v.try_into().unwrap_or_default()));
+        AdvancedParams { depth, output_max_size, search_for, denylist_hash }
     });
 
     // Auto-open panel if URL params are non-default.
@@ -235,7 +240,7 @@ pub fn biblizap_search_bar(props: &SearchBarProps) -> Html {
                         depth: Some(p.depth),
                         output_max_size: Some(p.output_max_size),
                         search_for: Some(p.search_for),
-                        denylist_hash: None, // TODO allow user to specify denylist patterns in the UI
+                        denylist_hash: p.denylist_hash.map(hex::encode),
                     },
                     position.next(),
                 );
@@ -360,6 +365,16 @@ fn SearchAdvancedPanel(props: &SearchAdvancedPanelProps) -> Html {
         })
     };
 
+    
+    let on_hash_change = {
+        let advanced_params = advanced_params.clone();
+        Callback::from(move |hash: Option<[u8; 32]>| {
+            let hash_str = hash.map(|h| hex::encode(h)).unwrap_or_default();
+            session_set("bz_denylist_hash", &hash_str);
+            advanced_params.set(AdvancedParams { denylist_hash: hash, ..*advanced_params });
+        })
+    };
+
     html! {
     <div class={advanced_class}>
         <div>
@@ -398,7 +413,7 @@ fn SearchAdvancedPanel(props: &SearchAdvancedPanelProps) -> Html {
                         <option value="References" selected={advanced_params.search_for == SearchFor::References}>{"References"}</option>
                     </select>
                 </div>
-                <Denylist />
+                <Denylist on_hash_change={on_hash_change} initial_hash={advanced_params.denylist_hash} />
             </div>
         </div>
     </div>
