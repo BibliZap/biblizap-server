@@ -405,6 +405,20 @@ pub fn BibliZapResults() -> Html {
         })
     };
 
+    let on_denylist_change = {
+        let navigator = navigator.clone();
+        let query = query.clone();
+        Callback::from(move |hash: Option<[u8; 32]>| {
+            let _ = navigator.replace_with_query(
+                &Route::BibliZapResults,
+                &BibliZapResultsQuery {
+                    denylist_hash: hash.map(hex::encode),
+                    ..query.clone()
+                },
+            );
+        })
+    };
+
     html! {
         <div>
             <div class={form_class}>
@@ -412,6 +426,7 @@ pub fn BibliZapResults() -> Html {
                     position={FormPosition::Top}
                     value={ids.join(" ")}
                     advanced={Some(AdvancedParams::from(&query))}
+                    on_denylist_change={on_denylist_change}
                 />
             </div>
             <div class="results-fade-in">

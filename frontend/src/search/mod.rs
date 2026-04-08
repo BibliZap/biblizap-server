@@ -94,6 +94,10 @@ pub struct SearchBarProps {
     /// the advanced panel is auto-opened so users can see their active settings.
     #[prop_or_default]
     pub advanced: Option<AdvancedParams>,
+    /// Optional callback fired immediately when the denylist hash changes (upload or removal).
+    /// Used by the results page to reflect the change in the URL without a full re-submit.
+    #[prop_or_default]
+    pub on_denylist_change: Option<Callback<Option<[u8; 32]>>>,
 }
 
 fn session_get(key: &str) -> Option<String> {
@@ -267,7 +271,7 @@ pub fn biblizap_search_bar(props: &SearchBarProps) -> Html {
                 </div>
                 <div id="idInputHelp" class="form-text">{"Enter DOIs or PMIDs to run BibliZap directly, or enter keywords to search PubMed first."}</div>
             </div>
-            <SearchAdvancedPanel show_advanced={show_advanced.clone()} advanced_params={advanced_params.clone()} />
+            <SearchAdvancedPanel show_advanced={show_advanced.clone()} advanced_params={advanced_params.clone()} on_denylist_change={props.on_denylist_change.clone()} />
         </form>
     }
 }
@@ -305,6 +309,8 @@ fn SearchGear(props: &SearchGearProps) -> Html {
 struct SearchAdvancedPanelProps {
     show_advanced: UseStateHandle<bool>,
     advanced_params: UseStateHandle<AdvancedParams>,
+    #[prop_or_default]
+    on_denylist_change: Option<Callback<Option<[u8; 32]>>>,
 }
 #[function_component]
 fn SearchAdvancedPanel(props: &SearchAdvancedPanelProps) -> Html {
@@ -367,10 +373,14 @@ fn SearchAdvancedPanel(props: &SearchAdvancedPanelProps) -> Html {
 
     let on_hash_change = {
         let advanced_params = advanced_params.clone();
+        let on_denylist_change = props.on_denylist_change.clone();
         Callback::from(move |hash: Option<[u8; 32]>| {
             let hash_str = hash.map(|h| hex::encode(h)).unwrap_or_default();
             session_set("bz_denylist_hash", &hash_str);
             advanced_params.set(AdvancedParams { denylist_hash: hash, ..*advanced_params });
+            if let Some(cb) = &on_denylist_change {
+                cb.emit(hash);
+            }
         })
     };
 
