@@ -1,12 +1,14 @@
-use std::cell::RefCell;
 use std::collections::HashSet;
 use std::ops::Deref;
-use std::rc::Rc;
 
+use wasm_bindgen_futures::spawn_local;
 use yew::prelude::*;
 use yew_router::prelude::*;
 
-use crate::common::{OutputMaxSize, SearchFor};
+use crate::{
+    common::{OutputMaxSize, SearchFor},
+    search::denylist::{decode_denylist_hash, download_denylist},
+};
 
 pub mod article;
 pub use article::Article;
@@ -39,7 +41,8 @@ pub fn Spinner() -> Html {
 /// Properties for the Results (Table) component.
 #[derive(Clone, PartialEq, Properties)]
 pub struct ResultsProps {
-    articles: Rc<RefCell<Vec<Article>>>,
+    articles: Vec<Article>,
+    denylist: Option<Vec<String>>,
     on_rerun_snowball: Callback<Vec<String>>,
 }
 
@@ -61,36 +64,69 @@ pub fn Results(props: &ResultsProps) -> Html {
         })
     };
 
-    let articles = props.articles.to_owned();
     let global_filter = use_state(|| "".to_string());
+    let sort_state = use_state(|| SortTotalState(vec![]));
 
-    let articles_to_display = articles
-        .deref()
-        .borrow()
+    let on_sort = {
+        let sort_state = sort_state.clone();
+        Callback::from(move |kind: SortBy| {
+            let mut new_state = (*sort_state).clone();
+            new_state.toggle(kind);
+            sort_state.set(new_state);
+        })
+    };
+
+    let denylist_set: Option<HashSet<String>> =
+        props.denylist.as_ref().map(|v| v.iter().cloned().collect());
+
+    gloo_console::log!(format!("Raw denylist dump : {:?}", props.denylist));
+
+    // Here we apply the denylist filtering on the frontend, but we could also implement it as a backend filter in the future.
+    let mut articles_to_display: Vec<Article> = props
+        .articles
         .iter()
         .filter(|a| a.matches_global(&global_filter))
+        .filter(|a| match &denylist_set {
+            None => true,
+            Some(set) => !a.doi.as_ref().map(|d| set.contains(d)).unwrap_or(false),
+        })
         .cloned()
-        .collect::<Vec<_>>();
+        .collect();
+
+    articles_to_display.sort_by(|a, b| {
+        use std::cmp::Ordering;
+        for sort_by in &sort_state.0 {
+            let ord = match sort_by {
+                SortBy::Year(SortByState::Ascending) => a.year_published.cmp(&b.year_published),
+                SortBy::Year(SortByState::Descending) => b.year_published.cmp(&a.year_published),
+                SortBy::Citations(SortByState::Ascending) => a.citations.cmp(&b.citations),
+                SortBy::Citations(SortByState::Descending) => b.citations.cmp(&a.citations),
+                SortBy::Score(SortByState::Ascending) => a.score.cmp(&b.score),
+                SortBy::Score(SortByState::Descending) => b.score.cmp(&a.score),
+            };
+            if ord != Ordering::Equal {
+                return ord;
+            }
+        }
+        b.score.cmp(&a.score)
+    });
 
     let on_rerun_click = {
-        let articles = props.articles.clone();
+        let articles_to_display = articles_to_display.clone();
         let selected_articles = selected_articles.clone();
         let on_run_snowball = props.on_rerun_snowball.clone();
         Callback::from(move |_: MouseEvent| {
-            let articles_to_download = get_articles_to_download(&articles, &selected_articles);
-            let ids: Vec<String> = articles_to_download
-                .iter()
-                .filter_map(|a| a.doi.clone())
-                .collect();
+            let to_download = get_articles_to_download(&articles_to_display, &selected_articles);
+            let ids: Vec<String> = to_download.iter().filter_map(|a| a.doi.clone()).collect();
             on_run_snowball.emit(ids);
         })
     };
 
     let on_copy_click = {
-        let articles = props.articles.clone();
+        let articles_to_display = articles_to_display.clone();
         let selected_articles = selected_articles.clone();
         Callback::from(move |_: MouseEvent| {
-            let articles = get_articles_to_download(&articles, &selected_articles);
+            let articles = get_articles_to_download(&articles_to_display, &selected_articles);
             let mut ids: Vec<String> = articles.into_iter().filter_map(|a| a.doi).collect();
             ids.sort();
             ids.dedup();
@@ -112,14 +148,6 @@ pub fn Results(props: &ResultsProps) -> Html {
     let articles_slice =
         &articles_to_display[0..std::cmp::min(*display_limit, articles_to_display.len())];
 
-    let trigger_update = use_force_update();
-    let redraw_table = {
-        let trigger_update = trigger_update.clone();
-        Callback::from(move |_: ()| {
-            trigger_update.force_update();
-        })
-    };
-
     let update_display_limit = {
         let display_limit = display_limit.clone();
         Callback::from(move |additional_limit: usize| {
@@ -135,7 +163,7 @@ pub fn Results(props: &ResultsProps) -> Html {
                         global_filter.set(value);
                     })
                 } />
-                <SortButtons articles={props.articles.clone()} redraw_table={redraw_table.clone()} />
+                <SortButtons sort_state={(*sort_state).clone()} on_sort={on_sort} />
             </div>
 
             // Modern List View
@@ -180,7 +208,7 @@ pub fn Results(props: &ResultsProps) -> Html {
                 } else {
                     html! {}
                 }}
-                    <DownloadButtons articles={articles.clone()} selected_articles={(*selected_articles).clone()} />
+                    <DownloadButtons articles={articles_to_display.clone()} selected_articles={(*selected_articles).clone()} />
                 </div>
         </div>
     }
@@ -196,7 +224,7 @@ pub async fn run_snowball_with_ids(
     depth: Option<u8>,
     output_max_size: Option<&OutputMaxSize>,
     search_for: Option<&SearchFor>,
-) -> Result<Rc<RefCell<Vec<Article>>>, Error> {
+) -> Result<Vec<Article>, Error> {
     use gloo_utils::document;
     let url = document().document_uri();
     let url = match url {
@@ -234,7 +262,7 @@ pub async fn run_snowball_with_ids(
 
     articles.sort_by_key(|article| std::cmp::Reverse(article.score.unwrap_or_default()));
 
-    Ok(Rc::new(RefCell::new(articles)))
+    Ok(articles)
 }
 
 fn location_to_query(
@@ -248,8 +276,25 @@ fn location_to_query(
 
 enum FetchStatus {
     Loading,
-    Success(Rc<RefCell<Vec<Article>>>),
+    Success(Vec<Article>),
     Error(Error),
+}
+
+fn update_denylist_state_from_hash(
+    hash: Option<[u8; 32]>,
+    denylist_state: UseStateHandle<Option<Vec<String>>>,
+) {
+    if let Some(hash) = hash {
+        spawn_local(async move {
+            let result = download_denylist(hash).await;
+            match result {
+                Ok(dois) => denylist_state.set(Some(dois)),
+                Err(_) => denylist_state.set(None),
+            }
+        });
+    } else {
+        denylist_state.set(None);
+    }
 }
 
 /// The BibliZap results page.
@@ -324,6 +369,19 @@ pub fn BibliZapResults() -> Html {
             || ()
         });
     }
+    let denylist = use_state(|| Option::<Vec<String>>::None);
+    {
+        let denylist_status = denylist.clone();
+        let denylist_hash = query
+            .denylist_hash
+            .clone()
+            .map(|h| decode_denylist_hash(&h).ok())
+            .flatten();
+        use_effect_with(denylist_hash, move |hash| {
+            update_denylist_state_from_hash(*hash, denylist_status.clone());
+            || ()
+        });
+    }
 
     // Preserve current page's expert params when re-running on a selection.
     let on_rerun_snowball = {
@@ -347,17 +405,6 @@ pub fn BibliZapResults() -> Html {
         })
     };
 
-    let content = match fetch_status.deref() {
-        FetchStatus::Loading => html! { <Spinner /> },
-        FetchStatus::Error(msg) => html! { <ErrorMessage msg={msg.to_string()} /> },
-        FetchStatus::Success(articles) => html! {
-            <Results
-                articles={articles}
-                on_rerun_snowball={on_rerun_snowball}
-            />
-        },
-    };
-
     html! {
         <div>
             <div class={form_class}>
@@ -368,7 +415,17 @@ pub fn BibliZapResults() -> Html {
                 />
             </div>
             <div class="results-fade-in">
-                {content}
+            {match fetch_status.deref() {
+                FetchStatus::Loading => html! { <Spinner /> },
+                FetchStatus::Error(msg) => html! { <ErrorMessage msg={msg.to_string()} /> },
+                FetchStatus::Success(articles) => html! {
+                    <Results
+                        articles={articles.clone()}
+                        denylist={(*denylist).clone()}
+                        on_rerun_snowball={on_rerun_snowball}
+                    />
+                },
+            }}
             </div>
         </div>
     }

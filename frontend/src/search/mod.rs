@@ -2,7 +2,7 @@ use yew::prelude::*;
 use yew_router::prelude::*;
 
 
-mod denylist;
+pub mod denylist;
 use denylist::*;
 
 use crate::common::{get_value, BibliZapResultsQuery, FormPosition};
@@ -365,7 +365,6 @@ fn SearchAdvancedPanel(props: &SearchAdvancedPanelProps) -> Html {
         })
     };
 
-    
     let on_hash_change = {
         let advanced_params = advanced_params.clone();
         Callback::from(move |hash: Option<[u8; 32]>| {

@@ -1,7 +1,4 @@
-use std::cell::RefCell;
 use std::collections::HashSet;
-use std::ops::Deref;
-use std::rc::Rc;
 
 use wasm_bindgen::prelude::*;
 use web_sys::HtmlElement;
@@ -188,18 +185,16 @@ pub fn download_bytes_as_file(bytes: &[u8], filename: &str) -> Result<(), common
 
 #[derive(Clone, PartialEq, Properties)]
 pub struct ButtonsProps {
-    pub articles: Rc<RefCell<Vec<Article>>>,
+    pub articles: Vec<Article>,
     pub selected_articles: HashSet<String>,
 }
 
 pub fn get_articles_to_download(
-    articles: &Rc<RefCell<Vec<Article>>>,
+    articles: &[Article],
     selected_articles: &HashSet<String>,
 ) -> Vec<Article> {
-    let articles = articles.borrow();
-
     if selected_articles.is_empty() {
-        articles.clone()
+        articles.to_vec()
     } else {
         articles
             .iter()
@@ -229,7 +224,7 @@ pub fn DownloadButtons(
             let articles_to_download = get_articles_to_download(&articles, &selected_articles);
             let bytes = to_excel(&articles_to_download).unwrap();
             let timestamp = chrono::Local::now().to_rfc3339();
-            let suffix = if articles_to_download.len() == articles.deref().borrow().len() {
+            let suffix = if articles_to_download.len() == articles.len() {
                 "all"
             } else {
                 "selected"
@@ -251,7 +246,7 @@ pub fn DownloadButtons(
             let articles_to_download = get_articles_to_download(&articles, &selected_articles);
             let bytes = to_ris(&articles_to_download).unwrap();
             let timestamp = chrono::Local::now().to_rfc3339();
-            let suffix = if articles_to_download.len() == articles.deref().borrow().len() {
+            let suffix = if articles_to_download.len() == articles.len() {
                 "all"
             } else {
                 "selected"
@@ -273,7 +268,7 @@ pub fn DownloadButtons(
             let articles_to_download = get_articles_to_download(&articles, &selected_articles);
             let bytes = to_bibtex(&articles_to_download).unwrap();
             let timestamp = chrono::Local::now().to_rfc3339();
-            let suffix = if articles_to_download.len() == articles.deref().borrow().len() {
+            let suffix = if articles_to_download.len() == articles.len() {
                 "all"
             } else {
                 "selected"

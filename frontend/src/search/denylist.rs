@@ -9,12 +9,25 @@ pub enum DenylistError {
     NetworkError(#[from] gloo_net::Error),
     #[error("Backend status code: {0}")]
     BackendError(u16),
+    #[error("Invalid hash format")]
+    InvalidHashFormat,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct UploadState {
     hash: [u8; 32],
     count: usize,
+}
+
+pub fn decode_denylist_hash(hash_str: &str) -> Result<[u8; 32], DenylistError> {
+    if let Ok(bytes) = hex::decode(hash_str) {
+        if bytes.len() == 32 {
+            let mut hash = [0u8; 32];
+            hash.copy_from_slice(&bytes);
+            return Ok(hash);
+        }
+    }
+    Err(DenylistError::InvalidHashFormat)
 }
 
 pub async fn upload_denylist_to_backend(dois: Vec<String>) -> Result<[u8; 32], DenylistError> {
@@ -25,17 +38,13 @@ pub async fn upload_denylist_to_backend(dois: Vec<String>) -> Result<[u8; 32], D
         .send()
         .await?;
     let hex_str = response.text().await?;
-    let bytes = hex::decode(hex_str.trim()).unwrap_or_default();
-    let mut hash = [0u8; 32];
-    if bytes.len() == 32 {
-        hash.copy_from_slice(&bytes);
-    }
+    let hash = decode_denylist_hash(&hex_str)?;
     Ok(hash)
 }
 
 pub async fn download_denylist(hash: [u8; 32]) -> Result<Vec<String>, DenylistError> {
     let hash_hex = hex::encode(hash);
-    let response = gloo_net::http::Request::get(&format!("/api/denylist/{}", hash_hex))
+    let response = gloo_net::http::Request::get(&format!("/api/denylist/download/{}", hash_hex))
         .send()
         .await?;
     if response.ok() {
