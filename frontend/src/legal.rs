@@ -4,7 +4,7 @@ use yew::prelude::*;
 /// Component for displaying legal information, including disclaimer, privacy policy, etc.
 #[function_component(LegalInformation)]
 pub fn legal_information() -> Html {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
 
     let mut creators: [&str; 3] = ["Bastien Le Guellec", "Raphaël Bentégeac", "Victor Leblanc"];
     creators.shuffle(&mut rng);
