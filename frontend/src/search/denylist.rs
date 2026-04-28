@@ -157,7 +157,7 @@ fn DenylistUploadButton(
         <label class="btn btn-outline-secondary btn-sm mb-0">
             <i class="bi bi-upload me-1" />
             {"Upload deny list"}
-            <input type="file" accept=".ris,.bzd" hidden=true onchange={on_file_change} />
+            <input type="file" accept=".ris,.nbib,.bzd" hidden=true onchange={on_file_change} />
         </label>
     }
 }
@@ -204,7 +204,7 @@ fn apply_file_read(
 ) {
     match result {
         Ok(content) => {
-            let dois = extract_dois(&content);
+            let dois = extract_dois(&content).unwrap_or_default();
             file_content.set(DenylistState::FrontendLoaded(dois.clone()));
             spawn_local(async move {
                 let hash = upload_denylist_to_backend(dois.clone()).await.unwrap();
@@ -219,24 +219,96 @@ fn apply_file_read(
     }
 }
 
-fn extract_dois(content: &str) -> Vec<String> {
-    // Detect RIS format by presence of field tags; otherwise treat as plain DOI list (.bzd).
-    if content.lines().any(|l| l.starts_with("DO  - ")) {
-        content
+#[derive(Debug, Clone, Copy)]
+enum FileType {
+    Ris,
+    Nbib,
+    FlatDoiList,
+}
+
+impl FileType {
+    // This inference doesn't need to be perfect
+    fn infer_from_raw_string(raw_string: &str) -> Option<Self> {
+        if raw_string.is_empty() {
+            return None;
+        }
+        // Only test on the first 15 lines
+        let sample_lines: Vec<&str> = raw_string
             .lines()
-            .filter_map(|line| {
-                if line.starts_with("DO  - ") {
-                    Some(line[6..].trim().to_string())
-                } else {
-                    None
-                }
-            })
-            .collect()
-    } else {
-        content
-            .lines()
-            .map(|l| l.trim().to_string())
+            .map(|l| l.trim())
             .filter(|l| !l.is_empty())
-            .collect()
+            .take(15)
+            .collect();
+
+        if sample_lines.iter().any(|l| l.starts_with("TY  - ")) {
+            return Some(Self::Ris);
+        }
+
+        if sample_lines.iter().any(|l| l.starts_with("PMID- ")) {
+            return Some(Self::Nbib);
+        }
+
+        let is_doi_list = sample_lines
+            .iter()
+            .all(|l| l.contains("10.") && l.contains('/'));
+
+        if is_doi_list {
+            return Some(Self::FlatDoiList);
+        }
+
+        None
     }
+}
+
+fn extract_dois(raw_string: &str) -> Option<Vec<String>> {
+    match FileType::infer_from_raw_string(raw_string)? {
+        FileType::Ris => Some(extract_from_ris(raw_string)),
+        FileType::Nbib => Some(extract_from_nbib(raw_string)),
+        FileType::FlatDoiList => Some(extract_from_flat_doi_list(raw_string)),
+    }
+}
+
+fn extract_from_ris(ris_content: &str) -> Vec<String> {
+    fn extract_from_ris_line(line: &str) -> Option<String> {
+        if line.starts_with("DO  - ") {
+            Some(line[6..].trim().to_string())
+        } else {
+            None
+        }
+    }
+
+    ris_content
+        .lines()
+        .filter_map(|line| extract_from_ris_line(line))
+        .collect()
+}
+
+fn extract_from_nbib(nbib_content: &str) -> Vec<String> {
+    let mut dois = Vec::new();
+    let mut found_doi_for_current_record = false;
+
+    for line in nbib_content.lines() {
+        // Reset our tracker when we hit a new record (indicated by PMID)
+        if line.starts_with("PMID- ") {
+            found_doi_for_current_record = false;
+            continue;
+        }
+
+        // If we haven't found a DOI for this record yet, look for one
+        if !found_doi_for_current_record && line.trim_end().ends_with("[doi]") {
+            if let Some((_, value)) = line.split_once("- ") {
+                let clean_doi = value.trim_end_matches("[doi]").trim();
+                dois.push(clean_doi.to_string());
+
+                // Lock it down so we ignore any subsequent AID/LID duplicates in this same record
+                found_doi_for_current_record = true;
+            }
+        }
+    }
+
+    dois
+}
+
+fn extract_from_flat_doi_list(flat_doi_list: &str) -> Vec<String> {
+    flat_doi_list.lines().map(|l| l.to_string()).collect()
 }
