@@ -62,29 +62,112 @@ pub async fn complete_articles(
     Ok(cached_articles)
 }
 
-async fn complete_articles_no_cache(
-    id_list: &[LensId],
+/// Enriches a mixed list of raw article identifiers (DOIs, PMIDs, Lens IDs) with full
+/// article data from the Lens.org API, using cache where available.
+///
+/// Unlike [`complete_articles`], this function accepts raw string identifiers of any
+/// supported type and handles the resolution from DOI/PMID to `LensId` internally.
+/// The id-mapping and article-data caches are populated as a side-effect.
+pub async fn complete_articles_by_raw_ids(
+    raw_ids: &[&str],
     api_key: &str,
     client: Option<&reqwest::Client>,
+    cache: Option<&dyn CacheBackend>,
 ) -> Result<Vec<ArticleWithData>, LensError> {
-    let client = match client {
-        Some(t) => t.to_owned(),
+    use std::collections::HashMap;
+
+    if raw_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let typed = TypedIdList::from_raw_id_list(raw_ids.iter().copied())?;
+
+    // Collect any directly-provided LensIds.
+    let mut lens_ids: Vec<LensId> = typed
+        .lens_id
+        .iter()
+        .filter_map(|s| LensId::try_from(*s).ok())
+        .collect();
+
+    let non_lens_strs: Vec<&str> = typed.doi.iter().chain(typed.pmid.iter()).copied().collect();
+
+    // Resolve DOIs/PMIDs via id_mappings cache, collect misses.
+    let mapping_misses: Vec<&str> = if !non_lens_strs.is_empty() {
+        if let Some(cb) = cache {
+            let keys: Vec<String> = non_lens_strs.iter().map(|s| s.to_string()).collect();
+            let hits: HashMap<String, LensId> = cb.get_id_mapping(&keys).await?;
+            lens_ids.extend(hits.values().cloned());
+            non_lens_strs
+                .into_iter()
+                .filter(|s| !hits.contains_key(*s))
+                .collect()
+        } else {
+            non_lens_strs
+        }
+    } else {
+        Vec::new()
+    };
+
+    // Fetch article data for all known LensIds (article_data cache-first).
+    let mut results = if !lens_ids.is_empty() {
+        complete_articles(&lens_ids, api_key, client, cache).await?
+    } else {
+        Vec::new()
+    };
+
+    if !mapping_misses.is_empty() {
+        let fetched = fetch_articles_no_cache(&mapping_misses, api_key, client).await?;
+
+        if let Some(cb) = cache {
+            let mappings: Vec<(String, LensId)> =
+                fetched.iter().flat_map(|a| a.all_id_mappings()).collect();
+            cb.store_id_mapping(&mappings).await?;
+            cb.store_article_data(&fetched).await?;
+        }
+
+        results.extend(fetched);
+    }
+
+    Ok(results)
+}
+
+/// Fetches article data from the Lens API, chunking requests at 1000 per batch.
+///
+/// This function performs the network requests only; caching is handled by the caller.
+/// Works with any ID type that implements `AsRef<str>` (e.g., `&str`, `LensId`, `String`).
+async fn fetch_articles_no_cache<T>(
+    ids: &[T],
+    api_key: &str,
+    client: Option<&reqwest::Client>,
+) -> Result<Vec<ArticleWithData>, LensError>
+where
+    T: AsRef<str>,
+{
+    let client_owned = match client {
+        Some(c) => c.to_owned(),
         None => reqwest::Client::new(),
     };
 
-    let output_id = futures::future::join_all(
-        id_list
-            .chunks(1000) // Chunk requests to manage load
-            .map(|x| request_batch(x, api_key, &client)),
+    let results: Vec<ArticleWithData> = futures::future::join_all(
+        ids.chunks(1000)
+            .map(|chunk| request_batch(chunk, api_key, &client_owned)),
     )
     .await
     .into_iter()
     .collect::<Result<Vec<_>, LensError>>()?
     .into_iter()
     .flatten()
-    .collect::<Vec<_>>();
+    .collect();
 
-    Ok(output_id)
+    Ok(results)
+}
+
+async fn complete_articles_no_cache(
+    id_list: &[LensId],
+    api_key: &str,
+    client: Option<&reqwest::Client>,
+) -> Result<Vec<ArticleWithData>, LensError> {
+    fetch_articles_no_cache(id_list, api_key, client).await
 }
 
 /// Completes the information for a chunk of article IDs using the Lens.org API.

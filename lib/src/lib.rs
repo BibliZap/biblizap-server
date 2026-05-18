@@ -173,6 +173,32 @@ where
     Ok(articles)
 }
 
+/// Fetches full article metadata for a mixed list of raw identifiers.
+///
+/// Accepts DOIs, PMIDs, and Lens IDs in any combination. Resolution from
+/// DOI/PMID to internal `LensId` is handled automatically, using the id-mapping
+/// and article-data caches as both a read and write layer.
+///
+/// # Arguments
+///
+/// * `raw_ids` – Slice of identifiers in any supported format.
+/// * `api_key` – Lens.org API key.
+/// * `client` – Optional `reqwest::Client`; a new one is created if `None`.
+/// * `cache` – Optional cache backend; results are stored when provided.
+///
+/// # Returns
+///
+/// A `Vec<Article>` with one entry per identifier successfully resolved.
+pub async fn enrich_by_raw_ids(
+    raw_ids: &[&str],
+    api_key: &str,
+    client: Option<&reqwest::Client>,
+    cache: Option<&dyn lens::cache::CacheBackend>,
+) -> Result<Vec<Article>, Error> {
+    let articles = lens::complete_articles_by_raw_ids(raw_ids, api_key, client, cache).await?;
+    Ok(articles.into_iter().map(Article::from).collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -332,5 +358,62 @@ mod tests {
         assert_eq!(article.year_published, Some(2020));
         assert_eq!(article.citations, Some(42));
         assert_eq!(article.score, None); // Score is not set during conversion
+    }
+
+    /// Test that `enrich_by_raw_ids` resolves DOIs to full article metadata and that a
+    /// second call with a broken network client succeeds entirely from cache.
+    #[cfg(feature = "cache-sqlite")]
+    #[tokio::test]
+    async fn test_enrich_by_raw_ids_cache() {
+        use crate::lens::cache::sqlite::SqliteBackend;
+
+        let api_key = get_api_key();
+        let cache = SqliteBackend::from_url("sqlite::memory:")
+            .await
+            .expect("Failed to create in-memory cache");
+
+        const DOIS: &[&str] = &["10.2196/64348", "10.1093/ckj/sfaf308"];
+        const EXPECTED_TITLES: &[&str] = &[
+            "Token Probabilities to Mitigate Large Language Models Overconfidence in Answering Medical Questions: Quantitative Study",
+            "ECOSBot: a multicenter validation pilot study of a generative AI tool for OSCE-based nephrology training",
+        ];
+
+        // --- First call: real network, populates cache ---
+        println!("Pass 1: fetching via Lens API and populating cache...");
+        let result1 = enrich_by_raw_ids(DOIS, &api_key, None, Some(&cache))
+            .await
+            .expect("First enrich_by_raw_ids call should succeed");
+
+        assert_eq!(result1.len(), 2, "Should return one article per DOI");
+
+        for expected in EXPECTED_TITLES {
+            assert!(
+                result1
+                    .iter()
+                    .any(|a| a.title.as_deref().is_some_and(|t| t.contains(expected))),
+                "Expected title fragment not found: {expected}"
+            );
+        }
+        println!("  ✓ Both articles resolved with correct titles");
+
+        // --- Second call: broken client, must hit cache ---
+        println!("Pass 2: re-querying with broken client (offline cache hit)...");
+        let broken_client = reqwest::Client::builder()
+            .proxy(reqwest::Proxy::all("http://0.0.0.0:1").expect("invalid proxy"))
+            .timeout(std::time::Duration::from_secs(1))
+            .build()
+            .expect("Failed to build broken client");
+
+        let result2 = enrich_by_raw_ids(DOIS, &api_key, Some(&broken_client), Some(&cache))
+            .await
+            .expect("Second enrich_by_raw_ids call should succeed from cache");
+
+        assert_eq!(result1.len(), result2.len(), "Cache hit count must match");
+
+        let titles1: Vec<Option<&str>> = result1.iter().map(|a| a.title.as_deref()).collect();
+        let titles2: Vec<Option<&str>> = result2.iter().map(|a| a.title.as_deref()).collect();
+        assert_eq!(titles1, titles2, "Titles must be identical on cache hit");
+
+        println!("  ✓ Cache hit confirmed — identical results without network access");
     }
 }

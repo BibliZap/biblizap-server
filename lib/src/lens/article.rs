@@ -69,6 +69,21 @@ pub struct ArticleWithData {
     pub article_data: ArticleData,
 }
 
+impl ArticleWithData {
+    pub fn all_id_mappings(&self) -> Vec<(String, LensId)> {
+        let mut mappings = Vec::new();
+        if let Some(external_ids) = &self.article_data.external_ids {
+            for doi in &external_ids.doi {
+                mappings.push((doi.clone(), self.lens_id.clone()));
+            }
+            for pmid in &external_ids.pmid {
+                mappings.push((pmid.clone(), self.lens_id.clone()));
+            }
+        }
+        mappings
+    }
+}
+
 /// Represents external identifiers for an article.
 ///
 /// When stored in cache, this is serialized as a normal struct.
