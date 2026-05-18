@@ -19,6 +19,9 @@ use search::*;
 
 mod common;
 
+mod systematic_review;
+use systematic_review::*;
+
 pub mod pubmed;
 use pubmed::*;
 
@@ -60,6 +63,8 @@ fn switch(routes: Route) -> Html {
         Route::PubMedResults => html! { <PubMedResultsPage /> },
         Route::BibliZapResults => html! { <BibliZapResults /> },
         Route::HowItWorks => html! { <HowItWorks /> },
+        Route::SystematicReview => html! { <SystematicReviewPage /> },
+        Route::SeedSelection => html! { <SeedSelectionPage /> },
         Route::Contact => html! { <Contact /> },
         Route::LegalInformation => html! { <LegalInformation /> },
         Route::NotFound => html! { <BibliZapSearchPage/> },

@@ -120,6 +120,10 @@ pub enum Route {
     PubMedResults,
     #[at("/biblizap-results")]
     BibliZapResults,
+    #[at("/systematic-review")]
+    SystematicReview,
+    #[at("/seed-selection")]
+    SeedSelection,
     #[at("/contact")]
     Contact,
     #[at("/legal")]
@@ -127,6 +131,13 @@ pub enum Route {
     #[not_found]
     #[at("/404")]
     NotFound,
+}
+
+/// Query params for `/seed-selection?bibliography=…`
+#[derive(Clone, PartialEq, Debug, serde::Serialize, serde::Deserialize)]
+pub struct SeedSelectionQuery {
+    /// Hex-encoded SHA-256 hash of the uploaded corpus.
+    pub bibliography: String,
 }
 
 /// Enum representing the direction of the snowball search.

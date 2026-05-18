@@ -51,6 +51,13 @@ pub fn NavBar(props: &NavBarProps) -> Html {
                         </Link<Route>>
                     </li>
                     <li class="nav-item">
+                        <Link<Route> to={Route::SystematicReview}
+                            classes={if route == Some(Route::SystematicReview) || route == Some(Route::SeedSelection) { "nav-link active" } else { "nav-link" }}>
+                            <i class="bi bi-journals px-2"></i>
+                            {"Systematic Review"}
+                        </Link<Route>>
+                    </li>
+                    <li class="nav-item">
                         <Link<Route> to={Route::Contact}
                             classes={if route == Some(Route::Contact) { "nav-link active" } else { "nav-link" }}>
                             <i class="bi bi-send-fill px-2"></i>

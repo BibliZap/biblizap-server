@@ -260,7 +260,7 @@ impl FileType {
     }
 }
 
-fn extract_dois(raw_string: &str) -> Option<Vec<String>> {
+pub fn extract_dois(raw_string: &str) -> Option<Vec<String>> {
     match FileType::infer_from_raw_string(raw_string)? {
         FileType::Ris => Some(extract_from_ris(raw_string)),
         FileType::Nbib => Some(extract_from_nbib(raw_string)),
