@@ -1,0 +1,35 @@
+[package]
+name = "biblizap-rs"
+version = "1.2.2"
+edition = "2024"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+default = []
+# Cache features are mutually exclusive - use either cache-sqlite OR cache-postgres, not both
+cache-sqlite = ["sqlx", "sqlx/sqlite"]
+cache-postgres = ["sqlx", "sqlx/postgres"]
+
+[dependencies]
+anyhow = "1.0.101"
+arrayvec = { version = "0.7.6", features = ["serde"] }
+async-std = "1.13.2"
+futures = "0.3.32"
+lazy_static = "1.5.0"
+log = "0.4.29"
+nohash-hasher = "0.2.0"
+regex = "1.12.3"
+reqwest = { version = "0.13.2", features = ["blocking"] }
+serde = { version = "1.0.228", features = ["serde_derive"] }
+serde_json = "1.0.149"
+thiserror = "2.0.18"
+tokio = { version = "1.49.0", features = ["rt", "full"] }
+sqlx = { version = "0.8", features = [
+    "runtime-tokio",
+    "macros",
+], optional = true }
+async-trait = "0.1.89"
+
+[dev-dependencies]
+dotenvy = "0.15.7"
