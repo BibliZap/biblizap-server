@@ -4,16 +4,16 @@ use actix_web::{HttpResponse, Responder, web};
 
 use crate::AppConfig;
 
-pub async fn upload_denylist(req_body: String, config: web::Data<AppConfig>) -> impl Responder {
-    let denylist = DenyList::from_flat_string(&req_body);
-    let hash = denylist.save_to_database(&config.database_pool).await;
+pub async fn upload_corpus(req_body: String, config: web::Data<AppConfig>) -> impl Responder {
+    let corpus = Corpus::from_flat_string(&req_body);
+    let hash = corpus.save_to_database(&config.database_pool).await;
     match hash {
         Ok(hash) => HttpResponse::Ok().body(hex::encode(hash)),
-        Err(e) => HttpResponse::InternalServerError().body(format!("Failed to save DenyList: {e}")),
+        Err(e) => HttpResponse::InternalServerError().body(format!("Failed to save corpus: {e}")),
     }
 }
 
-pub async fn download_denylist(
+pub async fn download_corpus(
     path: web::Path<String>,
     config: web::Data<AppConfig>,
 ) -> impl Responder {
@@ -26,17 +26,56 @@ pub async fn download_denylist(
         _ => return HttpResponse::BadRequest().body("Invalid hash format"),
     };
 
-    match DenyList::load_from_database(&config.database_pool, &hash_bytes).await {
-        Ok(denylist) => HttpResponse::Ok().body(denylist.to_flat_string()),
-        Err(DenyListError::DatabaseError(sqlx::Error::RowNotFound)) => {
-            HttpResponse::NotFound().body("Denylist not found")
+    match Corpus::load_from_database(&config.database_pool, &hash_bytes).await {
+        Ok(corpus) => HttpResponse::Ok().body(corpus.to_flat_string()),
+        Err(CorpusError::DatabaseError(sqlx::Error::RowNotFound)) => {
+            HttpResponse::NotFound().body("Corpus not found")
         }
-        Err(e) => HttpResponse::InternalServerError().body(format!("Failed to load DenyList: {e}")),
+        Err(e) => HttpResponse::InternalServerError().body(format!("Failed to load corpus: {e}")),
+    }
+}
+
+pub async fn enrich_corpus(
+    path: web::Path<String>,
+    config: web::Data<AppConfig>,
+) -> impl Responder {
+    let hash_bytes = match hex::decode(path.as_str()) {
+        Ok(bytes) if bytes.len() == 32 => {
+            let mut hash_array = [0u8; 32];
+            hash_array.copy_from_slice(&bytes);
+            hash_array
+        }
+        _ => return HttpResponse::BadRequest().body("Invalid hash format"),
+    };
+
+    let corpus = match Corpus::load_from_database(&config.database_pool, &hash_bytes).await {
+        Ok(c) => c,
+        Err(CorpusError::DatabaseError(sqlx::Error::RowNotFound)) => {
+            return HttpResponse::NotFound().body("Corpus not found");
+        }
+        Err(e) => {
+            return HttpResponse::InternalServerError().body(format!("Failed to load corpus: {e}"));
+        }
+    };
+
+    let doi_strings: Vec<String> = corpus.into();
+    let doi_strs: Vec<&str> = doi_strings.iter().map(|s| s.as_str()).collect();
+
+    match biblizap_rs::enrich_by_raw_ids(
+        &doi_strs,
+        &config.lens_api_key,
+        None,
+        Some(&config.cache_backend),
+    )
+    .await
+    {
+        Ok(articles) => HttpResponse::Ok().json(articles),
+        Err(e) => HttpResponse::InternalServerError().body(format!("Failed to enrich corpus: {e}")),
     }
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum DenyListError {
+pub enum CorpusError {
     #[error("Database error: {0}")]
     DatabaseError(#[from] sqlx::Error),
     #[error("Compression error: {0}")]
@@ -54,11 +93,11 @@ impl Doi {
 }
 
 #[derive(Debug, Clone)]
-struct DenyList {
+struct Corpus {
     pub dois: BTreeSet<Doi>,
 }
 
-impl DenyList {
+impl Corpus {
     pub fn to_flat_string(&self) -> String {
         self.dois
             .iter()
@@ -72,7 +111,7 @@ impl DenyList {
             .lines()
             .filter_map(|line| Doi::new(line))
             .collect::<BTreeSet<Doi>>();
-        DenyList { dois }
+        Corpus { dois }
     }
 
     pub fn sha256(&self) -> [u8; 32] {
@@ -85,26 +124,26 @@ impl DenyList {
         hasher.finalize().into()
     }
 
-    pub fn compress(&self) -> Result<Vec<u8>, DenyListError> {
+    pub fn compress(&self) -> Result<Vec<u8>, CorpusError> {
         use zstd::stream::encode_all;
         let flat_string = self.to_flat_string();
         Ok(encode_all(flat_string.as_bytes(), 0)?)
     }
 }
 
-impl From<BTreeSet<Doi>> for DenyList {
+impl From<BTreeSet<Doi>> for Corpus {
     fn from(dois: BTreeSet<Doi>) -> Self {
         Self { dois }
     }
 }
 
-impl From<DenyList> for BTreeSet<Doi> {
-    fn from(denylist: DenyList) -> Self {
-        denylist.dois
+impl From<Corpus> for BTreeSet<Doi> {
+    fn from(corpus: Corpus) -> Self {
+        corpus.dois
     }
 }
 
-impl From<Vec<String>> for DenyList {
+impl From<Vec<String>> for Corpus {
     fn from(doi_strings: Vec<String>) -> Self {
         let hashset: BTreeSet<Doi> = doi_strings
             .into_iter()
@@ -114,19 +153,19 @@ impl From<Vec<String>> for DenyList {
     }
 }
 
-impl From<DenyList> for Vec<String> {
-    fn from(denylist: DenyList) -> Self {
-        denylist.dois.into_iter().map(|doi| doi.0).collect()
+impl From<Corpus> for Vec<String> {
+    fn from(corpus: Corpus) -> Self {
+        corpus.dois.into_iter().map(|doi| doi.0).collect()
     }
 }
 
-impl DenyList {
-    pub async fn save_to_database(&self, pool: &sqlx::PgPool) -> Result<[u8; 32], DenyListError> {
+impl Corpus {
+    pub async fn save_to_database(&self, pool: &sqlx::PgPool) -> Result<[u8; 32], CorpusError> {
         let hash = self.sha256();
         let compressed_blob = self.compress()?;
         let _ = sqlx::query!(
             r#"
-            INSERT INTO bbz_denylists (hash, data)
+            INSERT INTO bbz_corpora (hash, data)
             VALUES ($1, $2)
             ON CONFLICT (hash) DO NOTHING
             "#,
@@ -142,11 +181,11 @@ impl DenyList {
     pub async fn load_from_database(
         pool: &sqlx::PgPool,
         hash: &[u8; 32],
-    ) -> Result<Self, DenyListError> {
+    ) -> Result<Self, CorpusError> {
         let record = sqlx::query!(
             r#"
             SELECT data
-            FROM bbz_denylists
+            FROM bbz_corpora
             WHERE hash = $1
             "#,
             hash
@@ -157,9 +196,9 @@ impl DenyList {
         let compressed_blob = record.data;
         let decompressed_data = zstd::stream::decode_all(&compressed_blob[..])?;
         let flat_string = String::from_utf8(decompressed_data).map_err(|e| {
-            DenyListError::CompressionError(std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+            CorpusError::CompressionError(std::io::Error::new(std::io::ErrorKind::InvalidData, e))
         })?;
-        Ok(DenyList::from_flat_string(&flat_string))
+        Ok(Corpus::from_flat_string(&flat_string))
     }
 }
 
@@ -167,8 +206,8 @@ impl DenyList {
 mod tests {
     use super::*;
 
-    fn make(dois: &[&str]) -> DenyList {
-        DenyList::from(dois.iter().map(|s| s.to_string()).collect::<Vec<_>>())
+    fn make(dois: &[&str]) -> Corpus {
+        Corpus::from(dois.iter().map(|s| s.to_string()).collect::<Vec<_>>())
     }
 
     #[test]
@@ -224,15 +263,15 @@ mod tests {
     #[test]
     fn serialize_deserialize_roundtrip() {
         let original = make(&["10.1016/j.cell.2020", "10.1038/s41586-021"]);
-        let roundtripped = DenyList::from_flat_string(&original.to_flat_string());
+        let roundtripped = Corpus::from_flat_string(&original.to_flat_string());
         assert_eq!(original.sha256(), roundtripped.sha256());
     }
 
     #[sqlx::test]
-    fn database_roundtrip(pool: sqlx::PgPool) -> Result<(), DenyListError> {
+    fn database_roundtrip(pool: sqlx::PgPool) -> Result<(), CorpusError> {
         let original = make(&["10.1016/j.cell.2020", "10.1038/s41586-021"]);
         let hash = original.save_to_database(&pool).await?;
-        let loaded = DenyList::load_from_database(&pool, &hash).await?;
+        let loaded = Corpus::load_from_database(&pool, &hash).await?;
         assert_eq!(original.sha256(), loaded.sha256());
         Ok(())
     }

@@ -7,7 +7,7 @@ use std::env;
 use thiserror::Error;
 
 mod common;
-mod denylist;
+mod corpus;
 mod pubmed;
 mod snowball;
 mod tracking;
@@ -44,7 +44,7 @@ pub enum Error {
     #[error(transparent)]
     JsonError(#[from] serde_json::Error),
     #[error(transparent)]
-    DenyListError(#[from] denylist::DenyListError),
+    CorpusError(#[from] corpus::CorpusError),
     #[error("Invalid identifier format: '{0}' is neither a valid DOI nor PMID")]
     InvalidIdFormat(String),
     #[error("Too many identifiers: maximum 7 allowed, got {0}")]
@@ -211,12 +211,15 @@ async fn main() -> std::io::Result<()> {
             .service(web::resource("/api").route(web::post().to(snowball_request)))
             .service(web::resource("/api/pubmed_search").route(web::post().to(pubmed_search)))
             .service(
-                web::resource("/api/denylist/download/{hash_hex}")
-                    .route(web::get().to(denylist::download_denylist)),
+                web::resource("/api/corpus/download/{hash_hex}")
+                    .route(web::get().to(corpus::download_corpus)),
             )
             .service(
-                web::resource("/api/denylist/upload")
-                    .route(web::post().to(denylist::upload_denylist)),
+                web::resource("/api/corpus/upload").route(web::post().to(corpus::upload_corpus)),
+            )
+            .service(
+                web::resource("/api/corpus/enrich/{hash_hex}")
+                    .route(web::get().to(corpus::enrich_corpus)),
             )
             // Catch all route to serve frontend static files, with fallback to index.html for SPA routing
             .default_service(ResourceFiles::new("/", generated).resolve_not_found_to_root())

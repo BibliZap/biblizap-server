@@ -32,7 +32,7 @@ pub fn decode_denylist_hash(hash_str: &str) -> Result<[u8; 32], DenylistError> {
 
 pub async fn upload_denylist_to_backend(dois: Vec<String>) -> Result<[u8; 32], DenylistError> {
     let body = dois.join("\n");
-    let response = gloo_net::http::Request::post("/api/denylist/upload")
+    let response = gloo_net::http::Request::post("/api/corpus/upload")
         .header("Content-Type", "text/plain")
         .body(body)?
         .send()
@@ -44,7 +44,7 @@ pub async fn upload_denylist_to_backend(dois: Vec<String>) -> Result<[u8; 32], D
 
 pub async fn download_denylist(hash: [u8; 32]) -> Result<Vec<String>, DenylistError> {
     let hash_hex = hex::encode(hash);
-    let response = gloo_net::http::Request::get(&format!("/api/denylist/download/{}", hash_hex))
+    let response = gloo_net::http::Request::get(&format!("/api/corpus/download/{}", hash_hex))
         .send()
         .await?;
     if response.ok() {
