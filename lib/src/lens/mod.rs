@@ -1137,7 +1137,9 @@ mod tests {
     /// Test that requests citations and references for a PMID twice with cache.
     /// This should expose a bug where PMIDs are not properly converted to LensIds
     /// before cache lookup, causing the second request to fail or return incorrect results.
-    #[cfg_attr(feature = "cache-sqlite", tokio::test)]
+
+    #[cfg(feature = "cache-sqlite")]
+    #[tokio::test]
     async fn test_pmid_twice_with_cache() {
         use crate::lens::cache::sqlite::SqliteBackend;
 
@@ -1199,7 +1201,8 @@ mod tests {
     }
 
     /// Test that ID mappings are populated when fetching references/citations with non-LensId inputs
-    #[cfg_attr(feature = "cache-sqlite", tokio::test)]
+    #[cfg(feature = "cache-sqlite")]
+    #[tokio::test]
     async fn test_id_mapping_population_for_non_lens_id() {
         use crate::lens::cache::sqlite::SqliteBackend;
 
@@ -1249,7 +1252,8 @@ mod tests {
     }
 
     /// Test that ID mappings are NOT populated when fetching with LensId inputs
-    #[cfg_attr(feature = "cache-sqlite", tokio::test)]
+    #[cfg(feature = "cache-sqlite")]
+    #[tokio::test]
     async fn test_no_id_mapping_for_lens_id() {
         use crate::lens::cache::sqlite::SqliteBackend;
 
@@ -1294,7 +1298,8 @@ mod tests {
 
     /// Test that snowball works completely offline when cache is populated
     /// This validates that cached data eliminates the need for network access
-    #[cfg_attr(feature = "cache-sqlite", tokio::test)]
+    #[cfg(feature = "cache-sqlite")]
+    #[tokio::test]
     async fn test_snowball_offline_with_cache() {
         use crate::lens::cache::sqlite::SqliteBackend;
         use std::time::Duration;

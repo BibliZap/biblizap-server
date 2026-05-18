@@ -207,7 +207,8 @@ mod tests {
     }
 
     /// Tests that `complete_articles` correctly uses caching
-    #[cfg_attr(feature = "cache-sqlite", tokio::test)]
+    #[cfg(feature = "cache-sqlite")]
+    #[tokio::test]
     async fn complete_articles_with_cache_test() {
         use crate::lens::cache::SqliteBackend;
 

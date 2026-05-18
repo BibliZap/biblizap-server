@@ -178,6 +178,7 @@ mod tests {
     use super::*;
 
     /// Helper function to get API key from environment
+    #[cfg(feature = "cache-sqlite")]
     fn get_api_key() -> String {
         dotenvy::var("LENS_API_KEY").expect("LENS_API_KEY must be set in .env file")
     }
@@ -188,7 +189,8 @@ mod tests {
     /// 1. Cached citation/reference data eliminates the need for network access during snowballing
     /// 2. Cached article data eliminates the need for network access during article completion
     /// 3. The entire public API workflow can operate offline from cache
-    #[cfg_attr(feature = "cache-sqlite", tokio::test)]
+    #[cfg(feature = "cache-sqlite")]
+    #[tokio::test]
     async fn test_snowball_offline_with_cache() {
         use crate::lens::cache::sqlite::SqliteBackend;
 
