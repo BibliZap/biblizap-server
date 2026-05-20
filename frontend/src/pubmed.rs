@@ -16,39 +16,74 @@ pub struct PubmedSearchResult {
     pub doi: Option<String>,
 }
 
-/// Sends a PubMed keyword search request to the backend.
+/// Sends a PubMed keyword search request directly to the NCBI E-utilities API.
 pub async fn get_pubmed_results(query: &str) -> Result<Vec<PubmedSearchResult>, Error> {
-    use gloo_utils::document;
-    let url = document().document_uri();
-    let url = match url {
-        Ok(href) => Ok(href),
-        Err(err) => Err(Error::JsValueString(err.as_string().unwrap_or_default())),
-    }?
-    .replace('#', "");
+    let max_results = 20;
+    let query_encoded = js_sys::encode_uri_component(query);
 
-    let mut api_url = url::Url::parse(&url)?;
-    api_url.set_fragment("".into());
-    api_url.set_query("".into());
-    api_url.set_path("api/pubmed_search");
-
-    let body = serde_json::json!({
-        "query": query,
-        "max_results": 20
-    });
-
-    let response = gloo_net::http::Request::post(api_url.as_str())
-        .header("Access-Control-Allow-Origin", "*")
-        .body(serde_json::to_string(&body)?)?
+    // ESearch: get matching PMIDs
+    let esearch_url = format!(
+        "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&sort=relevance&retmax={}&term={}",
+        max_results, query_encoded
+    );
+    let esearch_text = gloo_net::http::Request::get(&esearch_url)
         .send()
+        .await?
+        .text()
         .await?;
+    let esearch_json: serde_json::Value = serde_json::from_str(&esearch_text)?;
 
-    let result_text = response.text().await?;
-
-    if !response.ok() {
-        return Err(Error::Api(result_text));
+    let pmids: Vec<String> = match esearch_json["esearchresult"]["idlist"].as_array() {
+        Some(arr) => arr
+            .iter()
+            .filter_map(|v| v.as_str().map(String::from))
+            .collect(),
+        None => return Ok(vec![]),
+    };
+    if pmids.is_empty() {
+        return Ok(vec![]);
     }
 
-    let results: Vec<PubmedSearchResult> = serde_json::from_str(&result_text)?;
+    // ESummary: get article metadata for those PMIDs
+    let esummary_url = format!(
+        "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&retmode=json&id={}",
+        pmids.join(",")
+    );
+    let esummary_text = gloo_net::http::Request::get(&esummary_url)
+        .send()
+        .await?
+        .text()
+        .await?;
+    let esummary_json: serde_json::Value = serde_json::from_str(&esummary_text)?;
+
+    let result_obj = &esummary_json["result"];
+    let mut results = Vec::new();
+    for pmid in &pmids {
+        if let Some(article) = result_obj.get(pmid) {
+            let authors = article["authors"].as_array().map(|authors| {
+                authors
+                    .iter()
+                    .filter_map(|a| a["name"].as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            });
+            let doi = article["articleids"].as_array().and_then(|ids| {
+                ids.iter()
+                    .find(|id| id["idtype"].as_str() == Some("doi"))
+                    .and_then(|id| id["value"].as_str().map(String::from))
+            });
+            results.push(PubmedSearchResult {
+                pmid: pmid.clone(),
+                title: article["title"].as_str().map(String::from),
+                authors,
+                journal: article["fulljournalname"].as_str().map(String::from),
+                year: article["pubdate"]
+                    .as_str()
+                    .map(|d| d.chars().take(4).collect()),
+                doi,
+            });
+        }
+    }
     Ok(results)
 }
 

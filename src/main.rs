@@ -8,11 +8,9 @@ use thiserror::Error;
 
 mod common;
 mod corpus;
-mod pubmed;
 mod snowball;
 mod tracking;
 
-use pubmed::*;
 use snowball::*;
 
 // Includes the generated code for static files (frontend build).
@@ -21,7 +19,6 @@ include!(concat!(env!("OUT_DIR"), "/generated.rs"));
 /// Application configuration holding necessary secrets/settings.
 struct AppConfig {
     lens_api_key: String,
-    pubmed_api_key: Option<String>,
     cache_backend: PostgresBackend,
     database_pool: sqlx::PgPool,
 }
@@ -30,7 +27,6 @@ struct AppConfig {
 #[derive(Debug, Deserialize, Default)]
 struct FileConfig {
     lens_api_key: Option<String>,
-    pubmed_api_key: Option<String>,
     cache_backend_url: Option<String>,
     bind_address: Option<String>,
     port: Option<u16>,
@@ -174,24 +170,8 @@ async fn main() -> std::io::Result<()> {
 
     log::info!("Connected to tracking database");
 
-    // pubmed api key: CLI -> config file -> env var -> None (optional)
-    let pubmed_api_key = args
-        .pubmed_api_key
-        .clone()
-        .or(file_cfg.pubmed_api_key)
-        .or_else(|| env::var("BIBLIZAP_PUBMED_API_KEY").ok());
-
-    if pubmed_api_key.is_some() {
-        log::info!("PubMed API key configured");
-    } else {
-        log::warn!(
-            "No PubMed API key configured; PubMed searches will use unauthenticated access (rate-limited)"
-        );
-    }
-
     let config = web::Data::new(AppConfig {
         lens_api_key,
-        pubmed_api_key,
         cache_backend,
         database_pool,
     });
@@ -209,7 +189,6 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .app_data(config.clone())
             .service(web::resource("/api").route(web::post().to(snowball_request)))
-            .service(web::resource("/api/pubmed_search").route(web::post().to(pubmed_search)))
             .service(
                 web::resource("/api/corpus/download/{hash_hex}")
                     .route(web::get().to(corpus::download_corpus)),
@@ -262,10 +241,6 @@ struct Args {
     /// Your Lens.org API key (optional; can come from config or env)
     #[arg(short, long)]
     lens_api_key: Option<String>,
-
-    /// Your PubMed E-Utilities API key (optional; can come from config or env)
-    #[arg(long)]
-    pubmed_api_key: Option<String>,
 
     /// An URL to a working postgresql cache database (optional; can come from config or env)
     #[arg(short, long)]
