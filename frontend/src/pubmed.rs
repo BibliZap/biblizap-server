@@ -1,282 +1,47 @@
 use crate::common::Error;
-use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
 use std::ops::Deref;
+use wasm_bindgen_futures::spawn_local;
 use yew::prelude::*;
 use yew_router::prelude::*;
 
-/// A single article result from a PubMed keyword search.
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
-pub struct PubmedSearchResult {
-    pub pmid: String,
-    pub title: Option<String>,
-    pub authors: Option<String>,
-    pub journal: Option<String>,
-    pub year: Option<String>,
-    pub doi: Option<String>,
-}
+use crate::search::denylist::upload_denylist_to_backend;
 
-/// Sends a PubMed keyword search request directly to the NCBI E-utilities API.
-pub async fn get_pubmed_results(query: &str) -> Result<Vec<PubmedSearchResult>, Error> {
-    let max_results = 20;
+/// Fetches up to 500 PMIDs for a PubMed keyword search via NCBI ESearch.
+/// PMIDs are sent directly to the backend, which resolves them via Lens.org.
+pub async fn get_pubmed_pmids(query: &str) -> Result<Vec<String>, Error> {
     let query_encoded = js_sys::encode_uri_component(query);
-
-    // ESearch: get matching PMIDs
-    let esearch_url = format!(
-        "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&sort=relevance&retmax={}&term={}",
-        max_results, query_encoded
+    let url = format!(
+        "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&sort=relevance&retmax=500&term={}",
+        query_encoded
     );
-    let esearch_text = gloo_net::http::Request::get(&esearch_url)
+    let text = gloo_net::http::Request::get(&url)
         .send()
         .await?
         .text()
         .await?;
-    let esearch_json: serde_json::Value = serde_json::from_str(&esearch_text)?;
-
-    let pmids: Vec<String> = match esearch_json["esearchresult"]["idlist"].as_array() {
-        Some(arr) => arr
-            .iter()
-            .filter_map(|v| v.as_str().map(String::from))
-            .collect(),
-        None => return Ok(vec![]),
-    };
-    if pmids.is_empty() {
-        return Ok(vec![]);
-    }
-
-    // ESummary: get article metadata for those PMIDs
-    let esummary_url = format!(
-        "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&retmode=json&id={}",
-        pmids.join(",")
-    );
-    let esummary_text = gloo_net::http::Request::get(&esummary_url)
-        .send()
-        .await?
-        .text()
-        .await?;
-    let esummary_json: serde_json::Value = serde_json::from_str(&esummary_text)?;
-
-    let result_obj = &esummary_json["result"];
-    let mut results = Vec::new();
-    for pmid in &pmids {
-        if let Some(article) = result_obj.get(pmid) {
-            let authors = article["authors"].as_array().map(|authors| {
-                authors
-                    .iter()
-                    .filter_map(|a| a["name"].as_str())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            });
-            let doi = article["articleids"].as_array().and_then(|ids| {
-                ids.iter()
-                    .find(|id| id["idtype"].as_str() == Some("doi"))
-                    .and_then(|id| id["value"].as_str().map(String::from))
-            });
-            results.push(PubmedSearchResult {
-                pmid: pmid.clone(),
-                title: article["title"].as_str().map(String::from),
-                authors,
-                journal: article["fulljournalname"].as_str().map(String::from),
-                year: article["pubdate"]
-                    .as_str()
-                    .map(|d| d.chars().take(4).collect()),
-                doi,
-            });
-        }
-    }
-    Ok(results)
-}
-
-/// Properties for the PubMedResults component.
-#[derive(Clone, PartialEq, Properties)]
-pub struct PubmedResultsProps {
-    /// The list of PubMed search results to display.
-    pub results: Vec<PubmedSearchResult>,
-    /// Callback when the user clicks "Run BibliZap with selected articles".
-    /// Passes a list of identifiers (DOI preferred, PMID as fallback).
-    pub on_run_snowball: Callback<Vec<String>>,
-}
-
-/// Component for displaying PubMed keyword search results with selection checkboxes.
-/// Users can select articles and then run BibliZap snowball on the selected ones.
-#[function_component(PubMedResultsView)]
-pub fn pubmed_results_view(props: &PubmedResultsProps) -> Html {
-    let selected_set = use_state(|| HashSet::<String>::new());
-
-    let toggle_all = {
-        let selected = selected_set.clone();
-        let results = props.results.clone();
-        Callback::from(move |_: MouseEvent| {
-            let mut current = (*selected).clone();
-            if current.len() == results.len() {
-                current.clear();
-            } else {
-                current = results.iter().map(|r| r.pmid.clone()).collect();
-            }
-            selected.set(current);
+    let json: serde_json::Value = serde_json::from_str(&text)?;
+    let pmids = json["esearchresult"]["idlist"]
+        .as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
         })
-    };
-
-    let on_run = {
-        let selected = selected_set.clone();
-        let results = props.results.clone();
-        let on_run_snowball = props.on_run_snowball.clone();
-        Callback::from(move |_: MouseEvent| {
-            // For each selected PMID, prefer DOI if available (Lens.org has better DOI coverage)
-            let ids: Vec<String> = results
-                .iter()
-                .filter(|r| selected.contains(&r.pmid))
-                .map(|r| r.doi.clone().unwrap_or_else(|| r.pmid.clone()))
-                .collect();
-            on_run_snowball.emit(ids);
-        })
-    };
-
-    let all_selected = selected_set.len() == props.results.len() && !props.results.is_empty();
-    let has_selection = !selected_set.is_empty();
-
-    html! {
-        <div class="container-fluid">
-            <hr/>
-            <div class="d-flex justify-content-between align-items-center mb-3">
-                <h5 class="mb-0">
-                    {format!("PubMed search returned {} results", props.results.len())}
-                </h5>
-                <div class="d-flex gap-2 align-items-center">
-                    <button
-                        type="button"
-                        class="btn btn-outline-secondary btn-sm"
-                        onclick={toggle_all}
-                    >
-                        { if all_selected { "Deselect all" } else { "Select all" } }
-                    </button>
-                    <button
-                        type="button"
-                        class={classes!(
-                            "btn", "btn-primary",
-                            if !has_selection { Some("disabled") } else { None }
-                        )}
-                        onclick={on_run.clone()}
-                        disabled={!has_selection}
-                    >
-                        <i class="bi bi-search"></i>
-                        { format!(" Run BibliZap with {} selected", selected_set.len()) }
-                    </button>
-                </div>
-            </div>
-
-            <div class="table-responsive">
-                <table class="table table-hover table-bordered">
-                    <thead>
-                        <tr>
-                            <th style="width:3%"></th>
-                            <th>{"PMID"}</th>
-                            <th style="width:35%">{"Title"}</th>
-                            <th>{"Authors"}</th>
-                            <th>{"Journal"}</th>
-                            <th>{"Year"}</th>
-                        </tr>
-                    </thead>
-                    <tbody class="table-group-divider">
-                        { props.results.iter().map(|article| {
-                            html! {
-                                <Item result={article.clone()} selected_set={selected_set.clone()} />
-                            }
-                        }).collect::<Html>() }
-                    </tbody>
-                </table>
-            </div>
-
-            if has_selection {
-                <div class="d-flex justify-content-center mt-3 mb-3">
-                    <button
-                        type="button"
-                        class="btn btn-primary btn-lg"
-                        onclick={on_run.clone()}
-                    >
-                        <i class="bi bi-search"></i>
-                        { format!(" Run BibliZap with {} selected article{}", selected_set.len(), if selected_set.len() > 1 { "s" } else { "" }) }
-                    </button>
-                </div>
-            }
-        </div>
-    }
+        .unwrap_or_default();
+    Ok(pmids)
 }
 
-/// Properties for the PubMedResults component.
-#[derive(Clone, PartialEq, Properties)]
-pub struct ItemProps {
-    pub result: PubmedSearchResult,
-    pub selected_set: UseStateHandle<HashSet<String>>,
-}
-
-#[function_component(Item)]
-fn item(props: &ItemProps) -> Html {
-    let result = &props.result;
-    let selected_set = props.selected_set.clone();
-    let pmid = result.pmid.clone();
-    let is_selected = selected_set.contains(&pmid);
-    let toggle = {
-        let selected = selected_set.clone();
-        let pmid = pmid.clone();
-        Callback::from(move |_: MouseEvent| {
-            let mut current = (*selected).clone();
-            if current.contains(&pmid) {
-                current.remove(&pmid);
-            } else {
-                current.insert(pmid.clone());
-            }
-            selected.set(current);
-        })
-    };
-
-    let row_class = if is_selected { "table-primary" } else { "" };
-
-    html! {
-        <tr class={row_class} style="cursor:pointer" onclick={toggle.clone()}>
-            <td class="text-center">
-                <input
-                    type="checkbox"
-                    class="form-check-input"
-                    checked={is_selected}
-                    onclick={Callback::from(move |e: MouseEvent| {
-                        e.stop_propagation();
-                        toggle.emit(e);
-                    })}
-                />
-            </td>
-            <td>
-                <a href={format!("https://pubmed.ncbi.nlm.nih.gov/{}/", result.pmid)}
-                   target="_blank"
-                   onclick={Callback::from(|e: MouseEvent| e.stop_propagation())}
-                >
-                    {&result.pmid}
-                </a>
-            </td>
-            <td>{result.title.as_deref().unwrap_or("—")}</td>
-            <td>
-                <small>{result.authors.as_deref().unwrap_or("—")}</small>
-            </td>
-            <td>
-                <small><em>{result.journal.as_deref().unwrap_or("—")}</em></small>
-            </td>
-            <td>{result.year.as_deref().unwrap_or("—")}</td>
-        </tr>
-    }
-}
-
-enum PubmedFetchStatus {
+enum PageState {
     Loading,
-    Success(Vec<PubmedSearchResult>),
-    Error(Error),
+    Error(String),
 }
 
 /// The PubMed results page.
-/// Reads `?q=` from the URL, fetches PubMed search results on mount, and lets the user
-/// select articles to launch a BibliZap snowball search.
+/// Reads `?q=` from the URL, fetches DOIs from PubMed, uploads them as a corpus,
+/// then navigates directly to seed selection.
 #[function_component(PubMedResultsPage)]
 pub fn pubmed_results_page() -> Html {
-    use crate::common::{BibliZapResultsQuery, FormPosition, Route};
+    use crate::common::{FormPosition, Route, SeedSelectionQuery};
     use crate::results::{ErrorMessage, Spinner};
     use crate::search::{BiblizapSearchBar, PubMedResultsQuery};
 
@@ -301,19 +66,41 @@ pub fn pubmed_results_page() -> Html {
 
     let form_class = form_position.get_class();
 
-    let fetch_status: UseStateHandle<PubmedFetchStatus> = use_state(|| PubmedFetchStatus::Loading);
+    let page_state: UseStateHandle<PageState> = use_state(|| PageState::Loading);
 
     {
-        let fetch_status = fetch_status.clone();
+        let page_state = page_state.clone();
+        let navigator = navigator.clone();
         let query = query.clone();
         use_effect_with(query.clone(), move |_| {
             if !query.is_empty() {
-                fetch_status.set(PubmedFetchStatus::Loading);
-                wasm_bindgen_futures::spawn_local(async move {
-                    let result = get_pubmed_results(&query).await;
-                    match result {
-                        Ok(results) => fetch_status.set(PubmedFetchStatus::Success(results)),
-                        Err(e) => fetch_status.set(PubmedFetchStatus::Error(e)),
+                spawn_local(async move {
+                    let dois = match get_pubmed_pmids(&query).await {
+                        Ok(d) if d.is_empty() => {
+                            page_state.set(PageState::Error(
+                                "No articles found for this query.".to_string(),
+                            ));
+                            return;
+                        }
+                        Ok(d) => d,
+                        Err(e) => {
+                            page_state.set(PageState::Error(format!("PubMed search failed: {e}")));
+                            return;
+                        }
+                    };
+
+                    match upload_denylist_to_backend(dois).await {
+                        Ok(hash) => {
+                            let _ = navigator.push_with_query(
+                                &Route::SeedSelection,
+                                &SeedSelectionQuery {
+                                    bibliography: hex::encode(hash),
+                                },
+                            );
+                        }
+                        Err(e) => {
+                            page_state.set(PageState::Error(format!("Upload failed: {e}")));
+                        }
                     }
                 });
             }
@@ -321,29 +108,9 @@ pub fn pubmed_results_page() -> Html {
         });
     }
 
-    let on_run_snowball = {
-        let navigator = navigator.clone();
-        Callback::from(move |ids: Vec<String>| {
-            let ids_str = ids.join(" ");
-            let _ = navigator.push_with_query(
-                &Route::BibliZapResults,
-                &BibliZapResultsQuery {
-                    ids: ids_str,
-                    depth: None,
-                    output_max_size: None,
-                    search_for: None,
-                    denylist_hash: None,
-                },
-            );
-        })
-    };
-
-    let content = match fetch_status.deref() {
-        PubmedFetchStatus::Loading => html! { <Spinner /> },
-        PubmedFetchStatus::Error(e) => html! { <ErrorMessage msg={e.to_string()} /> },
-        PubmedFetchStatus::Success(results) => html! {
-            <PubMedResultsView results={results.clone()} on_run_snowball={on_run_snowball} />
-        },
+    let content = match &*page_state {
+        PageState::Loading => html! { <Spinner /> },
+        PageState::Error(msg) => html! { <ErrorMessage msg={msg.clone()} /> },
     };
 
     html! {

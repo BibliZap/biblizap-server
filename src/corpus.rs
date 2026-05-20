@@ -58,8 +58,8 @@ pub async fn enrich_corpus(
         }
     };
 
-    let doi_strings: Vec<String> = corpus.into();
-    let doi_strs: Vec<&str> = doi_strings.iter().map(|s| s.as_str()).collect();
+    let id_strings: Vec<String> = corpus.into();
+    let doi_strs: Vec<&str> = id_strings.iter().map(|s| s.as_str()).collect();
 
     match biblizap_rs::enrich_by_raw_ids(
         &doi_strs,
@@ -83,42 +83,42 @@ pub enum CorpusError {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-struct Doi(String);
+struct Identifier(String);
 
-impl Doi {
-    fn new(doi: &str) -> Option<Self> {
-        let normalized = doi.trim().to_lowercase();
-        crate::common::is_valid_doi(&normalized).then(|| Doi(normalized))
+impl Identifier {
+    fn new(s: &str) -> Option<Self> {
+        let normalized = s.trim().to_lowercase();
+        crate::common::is_valid_id(&normalized).then(|| Identifier(normalized))
     }
 }
 
 #[derive(Debug, Clone)]
 struct Corpus {
-    pub dois: BTreeSet<Doi>,
+    ids: BTreeSet<Identifier>,
 }
 
 impl Corpus {
     pub fn to_flat_string(&self) -> String {
-        self.dois
+        self.ids
             .iter()
-            .map(|doi| doi.0.clone())
+            .map(|id| id.0.clone())
             .collect::<Vec<String>>()
             .join("\n")
     }
 
     pub fn from_flat_string(flat: &str) -> Self {
-        let dois = flat
+        let ids = flat
             .lines()
-            .filter_map(|line| Doi::new(line))
-            .collect::<BTreeSet<Doi>>();
-        Corpus { dois }
+            .filter_map(|line| Identifier::new(line))
+            .collect::<BTreeSet<Identifier>>();
+        Corpus { ids }
     }
 
     pub fn sha256(&self) -> [u8; 32] {
         use sha2::{Digest, Sha256};
         let mut hasher = Sha256::new();
-        for doi in &self.dois {
-            hasher.update(doi.0.as_bytes());
+        for id in &self.ids {
+            hasher.update(id.0.as_bytes());
             hasher.update(b"\n");
         }
         hasher.finalize().into()
@@ -131,31 +131,31 @@ impl Corpus {
     }
 }
 
-impl From<BTreeSet<Doi>> for Corpus {
-    fn from(dois: BTreeSet<Doi>) -> Self {
-        Self { dois }
+impl From<BTreeSet<Identifier>> for Corpus {
+    fn from(ids: BTreeSet<Identifier>) -> Self {
+        Self { ids }
     }
 }
 
-impl From<Corpus> for BTreeSet<Doi> {
+impl From<Corpus> for BTreeSet<Identifier> {
     fn from(corpus: Corpus) -> Self {
-        corpus.dois
+        corpus.ids
     }
 }
 
 impl From<Vec<String>> for Corpus {
-    fn from(doi_strings: Vec<String>) -> Self {
-        let hashset: BTreeSet<Doi> = doi_strings
+    fn from(id_strings: Vec<String>) -> Self {
+        let ids: BTreeSet<Identifier> = id_strings
             .into_iter()
-            .filter_map(|s| Doi::new(&s))
+            .filter_map(|s| Identifier::new(&s))
             .collect();
-        Self { dois: hashset }
+        Self { ids }
     }
 }
 
 impl From<Corpus> for Vec<String> {
     fn from(corpus: Corpus) -> Self {
-        corpus.dois.into_iter().map(|doi| doi.0).collect()
+        corpus.ids.into_iter().map(|id| id.0).collect()
     }
 }
 
@@ -254,10 +254,20 @@ mod tests {
     }
 
     #[test]
-    fn invalid_dois_dropped() {
+    fn invalid_ids_dropped() {
         let with_invalid = make(&["10.1234/abc", "not-a-doi", "https://doi.org/10.1234/abc"]);
         let clean = make(&["10.1234/abc"]);
         assert_eq!(with_invalid.sha256(), clean.sha256());
+    }
+
+    #[test]
+    fn pmids_accepted() {
+        let with_pmid = make(&["10.1234/abc", "29406940"]);
+        let doi_only = make(&["10.1234/abc"]);
+        assert_ne!(with_pmid.sha256(), doi_only.sha256());
+        // PMID alone is also valid
+        let pmid_only = make(&["29406940"]);
+        assert_ne!(pmid_only.sha256(), doi_only.sha256());
     }
 
     #[test]
