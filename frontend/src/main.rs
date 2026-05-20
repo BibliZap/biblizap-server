@@ -22,6 +22,9 @@ mod common;
 mod systematic_review;
 use systematic_review::*;
 
+mod seed_selection;
+use seed_selection::*;
+
 pub mod pubmed;
 use pubmed::*;
 

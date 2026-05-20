@@ -17,7 +17,7 @@ mod download;
 use download::*;
 
 mod item;
-use item::Item;
+pub use item::Item;
 
 mod organize;
 use organize::*;

@@ -1,6 +1,6 @@
 use gloo_file::{callbacks::read_as_text, File};
 use wasm_bindgen_futures::spawn_local;
-use web_sys::HtmlInputElement;
+use web_sys::{DragEvent, HtmlInputElement};
 use yew::prelude::*;
 use yew_router::prelude::*;
 
@@ -20,16 +20,11 @@ pub fn SystematicReviewPage() -> Html {
     let state = use_state(|| PageState::Idle);
     let reader_task = use_mut_ref(|| None);
 
-    let on_file_change = {
+    let on_file = {
         let state = state.clone();
         let navigator = navigator.clone();
         let reader_task = reader_task.clone();
-        Callback::from(move |e: Event| {
-            let input: HtmlInputElement = e.target_unchecked_into();
-            let file = match input.files().and_then(|f| f.get(0)) {
-                Some(f) => File::from(f),
-                None => return,
-            };
+        Callback::from(move |file: File| {
             state.set(PageState::Loading);
             let state = state.clone();
             let navigator = navigator.clone();
@@ -79,48 +74,115 @@ pub fn SystematicReviewPage() -> Html {
                 {"Upload your existing reference list to browse its articles and select which ones to use as seeds for BibliZap."}
             </p>
             { match (*state).clone() {
-                PageState::Idle => html! { <UploadButton on_file_change={on_file_change} label="Upload bibliography" /> },
-                PageState::Loading => html! {
-                    <div class="d-flex align-items-center gap-2 text-muted">
-                        <div class="spinner-border spinner-border-sm" role="status" />
-                        <span>{"Uploading bibliography\u{2026}"}</span>
-                    </div>
-                },
-                PageState::Error(msg) => html! {
-                    <div class="d-flex flex-column gap-3">
-                        <div class="alert alert-danger mb-0" role="alert">
-                            <i class="bi bi-exclamation-triangle-fill me-2" />
-                            { msg }
-                        </div>
-                        <UploadButton on_file_change={on_file_change} label="Try again" />
-                    </div>
-                },
+                PageState::Idle => html! { <DropZone on_file={on_file} /> },
+                PageState::Loading => html! { <LoadingState /> },
+                PageState::Error(msg) => html! { <ErrorState {msg} on_file={on_file} /> },
             }}
         </div>
     }
 }
 
-/// Placeholder shown at `/seed-selection` until the seed selection page is implemented.
 #[function_component]
-pub fn SeedSelectionPage() -> Html {
+fn LoadingState() -> Html {
     html! {
-        <div class="text-muted">{"Seed selection — coming soon."}</div>
+        <div class="d-flex align-items-center gap-2 text-muted">
+            <div class="spinner-border spinner-border-sm" role="status" />
+            <span>{"Uploading bibliography\u{2026}"}</span>
+        </div>
     }
 }
 
 #[derive(Clone, PartialEq, Properties)]
-struct UploadButtonProps {
-    on_file_change: Callback<Event>,
-    label: &'static str,
+struct ErrorStateProps {
+    msg: String,
+    on_file: Callback<File>,
 }
 
 #[function_component]
-fn UploadButton(props: &UploadButtonProps) -> Html {
+fn ErrorState(props: &ErrorStateProps) -> Html {
     html! {
-        <label class="btn btn-primary align-self-start">
-            <i class="bi bi-upload me-2" />
-            { props.label }
-            <input type="file" accept=".ris,.nbib,.bzd" hidden=true onchange={props.on_file_change.clone()} />
+        <div class="d-flex flex-column gap-3">
+            <div class="alert alert-danger mb-0" role="alert">
+                <i class="bi bi-exclamation-triangle-fill me-2" />
+                { &props.msg }
+            </div>
+            <DropZone on_file={props.on_file.clone()} />
+        </div>
+    }
+}
+
+#[derive(Clone, PartialEq, Properties)]
+struct DropZoneProps {
+    on_file: Callback<File>,
+}
+
+#[function_component]
+fn DropZone(props: &DropZoneProps) -> Html {
+    let is_dragging = use_state(|| false);
+
+    let ondragover = {
+        let is_dragging = is_dragging.clone();
+        Callback::from(move |e: DragEvent| {
+            e.prevent_default();
+            is_dragging.set(true);
+        })
+    };
+
+    let ondragleave = {
+        let is_dragging = is_dragging.clone();
+        Callback::from(move |_: DragEvent| {
+            is_dragging.set(false);
+        })
+    };
+
+    let ondrop = {
+        let is_dragging = is_dragging.clone();
+        let on_file = props.on_file.clone();
+        Callback::from(move |e: DragEvent| {
+            e.prevent_default();
+            is_dragging.set(false);
+            let file = e
+                .data_transfer()
+                .and_then(|dt| dt.files())
+                .and_then(|fl| fl.get(0))
+                .map(File::from);
+            if let Some(file) = file {
+                on_file.emit(file);
+            }
+        })
+    };
+
+    let onchange = {
+        let on_file = props.on_file.clone();
+        Callback::from(move |e: Event| {
+            let input: HtmlInputElement = e.target_unchecked_into();
+            let file = input.files().and_then(|f| f.get(0)).map(File::from);
+            if let Some(file) = file {
+                on_file.emit(file);
+            }
+        })
+    };
+
+    let border_class = if *is_dragging {
+        "border-primary bg-primary-subtle"
+    } else {
+        "border-secondary-subtle"
+    };
+
+    html! {
+        <label
+            class={classes!("d-flex", "flex-column", "align-items-center", "justify-content-center",
+                "border", "border-2", "rounded-3", "p-5", "w-100", "text-center", "gap-2",
+                border_class)}
+            style="border-style: dashed !important; cursor: pointer;"
+            ondragover={ondragover}
+            ondragleave={ondragleave}
+            ondrop={ondrop}
+        >
+            <i class="bi bi-upload fs-3 text-secondary" />
+            <span class="fw-medium">{"Click to upload or drag & drop"}</span>
+            <small class="text-muted">{".ris, .nbib, .bzd"}</small>
+            <input type="file" accept=".ris,.nbib,.bzd" hidden=true onchange={onchange} />
         </label>
     }
 }
