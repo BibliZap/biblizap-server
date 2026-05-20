@@ -15,27 +15,27 @@ enum LoadState {
     Error(String),
 }
 
+/// Self-contained seed picker: fetches enriched articles for `bibliography_hash`
+/// and renders the selectable list with the "Run BibliZap" button.
+/// Embeddable in any page that already has a bibliography hash.
+#[derive(Clone, PartialEq, Properties)]
+pub struct SeedPickerProps {
+    pub bibliography_hash: String,
+}
+
 #[function_component]
-pub fn SeedSelectionPage() -> Html {
-    let location = use_location().unwrap();
-
-    let bibliography_hash = location
-        .query::<SeedSelectionQuery>()
-        .ok()
-        .map(|q| q.bibliography)
-        .unwrap_or_default();
-
+pub fn SeedPicker(props: &SeedPickerProps) -> Html {
     let load_state = use_state(|| LoadState::Loading);
 
     {
         let load_state = load_state.clone();
-        let hash = bibliography_hash.clone();
+        let hash = props.bibliography_hash.clone();
         use_effect_with(hash, move |hash| {
             let hash = hash.clone();
             let load_state = load_state.clone();
             if hash.is_empty() {
                 load_state.set(LoadState::Error(
-                    "No bibliography hash in URL. Please upload a bibliography first.".to_string(),
+                    "No bibliography hash provided.".to_string(),
                 ));
             } else {
                 spawn_local(async move {
@@ -62,9 +62,22 @@ pub fn SeedSelectionPage() -> Html {
         LoadState::Loading => html! { <Spinner /> },
         LoadState::Error(msg) => html! { <SeedSelectionError {msg} /> },
         LoadState::Loaded(articles) => html! {
-            <SeedSelectionLoaded {articles} bibliography_hash={bibliography_hash} />
+            <SeedSelectionLoaded {articles} bibliography_hash={props.bibliography_hash.clone()} />
         },
     }
+}
+
+#[function_component]
+pub fn SeedSelectionPage() -> Html {
+    let location = use_location().unwrap();
+
+    let bibliography_hash = location
+        .query::<SeedSelectionQuery>()
+        .ok()
+        .map(|q| q.bibliography)
+        .unwrap_or_default();
+
+    html! { <SeedPicker {bibliography_hash} /> }
 }
 
 #[derive(Clone, PartialEq, Properties)]
@@ -75,16 +88,9 @@ struct SeedSelectionErrorProps {
 #[function_component]
 fn SeedSelectionError(props: &SeedSelectionErrorProps) -> Html {
     html! {
-        <div>
-            <h2 class="mb-3">{"Seed Selection"}</h2>
-            <div class="alert alert-danger" role="alert">
-                <i class="bi bi-exclamation-triangle-fill me-2" />
-                { &props.msg }
-            </div>
-            <Link<Route> to={Route::SystematicReview} classes="btn btn-outline-secondary">
-                <i class="bi bi-arrow-left me-2" />
-                {"Back to upload"}
-            </Link<Route>>
+        <div class="alert alert-danger" role="alert">
+            <i class="bi bi-exclamation-triangle-fill me-2" />
+            { &props.msg }
         </div>
     }
 }

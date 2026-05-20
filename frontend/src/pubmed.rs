@@ -1,4 +1,5 @@
 use crate::common::Error;
+use crate::seed_selection::SeedPicker;
 use std::ops::Deref;
 use wasm_bindgen_futures::spawn_local;
 use yew::prelude::*;
@@ -33,6 +34,7 @@ pub async fn get_pubmed_pmids(query: &str) -> Result<Vec<String>, Error> {
 
 enum PageState {
     Loading,
+    Loaded(String),
     Error(String),
 }
 
@@ -41,7 +43,7 @@ enum PageState {
 /// then navigates directly to seed selection.
 #[function_component(PubMedResultsPage)]
 pub fn pubmed_results_page() -> Html {
-    use crate::common::{FormPosition, Route, SeedSelectionQuery};
+    use crate::common::{FormPosition, Route};
     use crate::results::{ErrorMessage, Spinner};
     use crate::search::{BiblizapSearchBar, PubMedResultsQuery};
 
@@ -70,7 +72,6 @@ pub fn pubmed_results_page() -> Html {
 
     {
         let page_state = page_state.clone();
-        let navigator = navigator.clone();
         let query = query.clone();
         use_effect_with(query.clone(), move |_| {
             if !query.is_empty() {
@@ -91,12 +92,7 @@ pub fn pubmed_results_page() -> Html {
 
                     match upload_denylist_to_backend(dois).await {
                         Ok(hash) => {
-                            let _ = navigator.push_with_query(
-                                &Route::SeedSelection,
-                                &SeedSelectionQuery {
-                                    bibliography: hex::encode(hash),
-                                },
-                            );
+                            page_state.set(PageState::Loaded(hex::encode(hash)));
                         }
                         Err(e) => {
                             page_state.set(PageState::Error(format!("Upload failed: {e}")));
@@ -111,6 +107,7 @@ pub fn pubmed_results_page() -> Html {
     let content = match &*page_state {
         PageState::Loading => html! { <Spinner /> },
         PageState::Error(msg) => html! { <ErrorMessage msg={msg.clone()} /> },
+        PageState::Loaded(hash) => html! { <SeedPicker bibliography_hash={hash.clone()} /> },
     };
 
     html! {
@@ -118,6 +115,13 @@ pub fn pubmed_results_page() -> Html {
             <div class={form_class}>
                 <BiblizapSearchBar position={FormPosition::Top} value={query.clone()} />
             </div>
+            {
+                if !matches!(&*page_state, PageState::Loading) {
+                    html! { <hr class="my-4" /> }
+                } else {
+                    html! {}
+                }
+            }
             <div class="results-fade-in">
                 {content}
             </div>
