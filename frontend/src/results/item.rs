@@ -102,37 +102,32 @@ fn ItemAbstract(props: &ItemAbstractProps) -> Html {
 /// Displays article information in a clean, PubMed-inspired layout.
 #[function_component]
 pub fn Item(props: &ItemProps) -> Html {
-    fn doi_link(doi: Option<String>) -> Option<String> {
-        Some(format!("https://doi.org/{}", doi?))
-    }
-
-    let is_selected = props
-        .article
-        .doi
+    let article_id = props.article.id();
+    let is_selected = article_id
         .as_ref()
-        .map(|doi| props.selected_articles.contains(doi))
+        .map(|id| props.selected_articles.contains(id))
         .unwrap_or(false);
 
     let onchange = {
         let update_selected = props.update_selected.clone();
-        let doi = props.article.doi.clone();
+        let id = article_id.clone();
         Callback::from(move |event: Event| {
             event.stop_propagation();
             let checked = event
                 .target_unchecked_into::<web_sys::HtmlInputElement>()
                 .checked();
-            if let Some(doi) = &doi {
-                update_selected.emit((doi.clone(), checked))
+            if let Some(id) = &id {
+                update_selected.emit((id.clone(), checked))
             }
         })
     };
 
     let onclick_item = {
         let update_selected = props.update_selected.clone();
-        let doi = props.article.doi.clone();
+        let id = article_id.clone();
         Callback::from(move |_: MouseEvent| {
-            if let Some(doi) = &doi {
-                update_selected.emit((doi.clone(), !is_selected));
+            if let Some(id) = &id {
+                update_selected.emit((id.clone(), !is_selected));
             }
         })
     };
@@ -164,7 +159,7 @@ pub fn Item(props: &ItemProps) -> Html {
                 <div class="col">
                     <h5 class="mb-1">
                         <span class="text-muted fw-normal me-2" style="font-size: 0.95rem;">{index_str}</span>
-                        <a href={doi_link(props.article.doi.clone())} class="article-title-link text-decoration-none text-body fw-semibold" target="_blank" style="font-size: 1.05rem;" onclick={stop_click}>
+                        <a href={props.article.article_link()} class="article-title-link text-decoration-none text-body fw-semibold" target="_blank" style="font-size: 1.05rem;" onclick={stop_click}>
                             {props.article.title.clone().unwrap_or_else(|| "Untitled Article".to_string())}
                         </a>
                     </h5>

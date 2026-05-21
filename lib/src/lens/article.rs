@@ -235,13 +235,9 @@ impl Article {
     }
 
     /// Gets the first PMID (PubMed ID) from the external identifiers, if available.
-    ///
-    /// Note: This currently incorrectly returns the first DOI. It should return the first PMID.
     pub fn pmid(&self) -> Option<String> {
         let external_ids = self.external_ids.clone()?;
-        // TODO: This should return the first PMID, not DOI
-        let id = external_ids.doi.first()?.to_owned();
-        Some(id)
+        external_ids.pmid.first()?.to_owned().into()
     }
 
     /// Gets the first DOI (Digital Object Identifier) from the external identifiers, if available.

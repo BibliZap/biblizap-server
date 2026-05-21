@@ -155,8 +155,8 @@ fn SeedSelectionLoaded(props: &SeedSelectionLoadedProps) -> Html {
         Callback::from(move |_: MouseEvent| {
             let mut s = HashSet::new();
             for article in &articles {
-                if let Some(doi) = &article.doi {
-                    s.insert(doi.clone());
+                if let Some(id) = article.id() {
+                    s.insert(id);
                 }
             }
             selected.set(s);

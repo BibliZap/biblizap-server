@@ -9,8 +9,28 @@ pub struct Article {
     pub title: Option<String>,
     pub summary: Option<String>,
     pub doi: Option<String>,
+    pub pmid: Option<String>,
     pub citations: Option<i32>,
     pub score: Option<i32>,
+}
+
+impl Article {
+    /// Get a unique identifier for this article (DOI preferred, fallback to PMID).
+    pub fn id(&self) -> Option<String> {
+        self.doi.clone().or_else(|| self.pmid.clone())
+    }
+
+    /// Get a URL link for this article (DOI preferred, fallback to PubMed PMID).
+    pub fn article_link(&self) -> Option<String> {
+        self.doi
+            .clone()
+            .map(|d| format!("https://doi.org/{}", d))
+            .or_else(|| {
+                self.pmid
+                    .clone()
+                    .map(|p| format!("https://pubmed.ncbi.nlm.nih.gov/{}/", p))
+            })
+    }
 }
 
 impl Article {
