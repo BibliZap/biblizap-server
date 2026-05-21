@@ -149,6 +149,27 @@ fn SeedSelectionLoaded(props: &SeedSelectionLoadedProps) -> Html {
         })
     };
 
+    let select_all = {
+        let selected = selected.clone();
+        let articles = props.articles.clone();
+        Callback::from(move |_: MouseEvent| {
+            let mut s = HashSet::new();
+            for article in &articles {
+                if let Some(doi) = &article.doi {
+                    s.insert(doi.clone());
+                }
+            }
+            selected.set(s);
+        })
+    };
+
+    let clear_all = {
+        let selected = selected.clone();
+        Callback::from(move |_: MouseEvent| {
+            selected.set(HashSet::new());
+        })
+    };
+
     html! {
         <div>
             <div class="d-flex justify-content-between align-items-center mb-4 gap-3 flex-wrap">
@@ -159,10 +180,20 @@ fn SeedSelectionLoaded(props: &SeedSelectionLoadedProps) -> Html {
                         { if n_selected > 0 { format!(" · {n_selected} selected") } else { String::new() } }
                     </p>
                 </div>
-                <button class="btn btn-primary" disabled={n_selected == 0} onclick={on_run}>
-                    <i class="bi bi-search me-2" />
-                    { run_label }
-                </button>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-secondary btn-sm" onclick={select_all.clone()}>
+                        <i class="bi bi-check-all me-1" />
+                        {"Select All"}
+                    </button>
+                    <button class="btn btn-outline-secondary btn-sm" onclick={clear_all} disabled={n_selected == 0}>
+                        <i class="bi bi-x me-1" />
+                        {"Clear"}
+                    </button>
+                    <button class="btn btn-primary" disabled={n_selected == 0} onclick={on_run}>
+                        <i class="bi bi-search me-2" />
+                        { run_label }
+                    </button>
+                </div>
             </div>
 
             { if props.articles.is_empty() {
@@ -173,7 +204,7 @@ fn SeedSelectionLoaded(props: &SeedSelectionLoadedProps) -> Html {
                 }
             } else {
                 html! {
-                    <div>
+                    <div class="d-flex flex-column gap-3">
                         { props.articles.iter().enumerate().map(|(index, article)| html! {
                             <Item
                                 article={article.clone()}
