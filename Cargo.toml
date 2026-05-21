@@ -19,7 +19,7 @@ actix-web-static-files = { version = "4.1", features = ["static-files-03"] }
 biblizap-rs = { path = "lib", version = "1.2.2", features = ["cache-postgres"] }
 clap = { version = "4.6.1", features = ["derive"] }
 color-print = "0.3.7"
-config = { version = "0.15.22", features = ["toml"] }
+config = { version = "0.15.23", features = ["toml"] }
 crc32fast = "1.5"
 dotenvy = "0.15.7"
 env_logger = "0.11.10"
@@ -38,7 +38,7 @@ sqlx = { version = "0.8", features = [
 ] }
 static-files = "0.3.1"
 thiserror = "2.0.18"
-tokio = "1.52.1"
+tokio = "1.52.3"
 urlencoding = "2.1"
 uuid = { version = "1.23", features = ["v4", "serde"] }
 yew-router = "0.20.0"
