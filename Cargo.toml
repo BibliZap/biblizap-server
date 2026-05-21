@@ -48,3 +48,12 @@ zstd = "0.13.3"
 [build-dependencies]
 static-files = "0.3.1"
 change-detection = "1.2"
+
+[profile.release]
+# Backend: optimize for speed (default opt-level = 3)
+
+[profile.wasm-release]
+inherits = "release"
+opt-level = "z"
+lto = true
+codegen-units = 1

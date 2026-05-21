@@ -8,7 +8,7 @@ CARGO_FLAGS=""
 # Parse arguments
 if [[ "${1:-}" == "--release" ]]; then
     BUILD_MODE="release"
-    TRUNK_FLAGS="--release"
+    TRUNK_FLAGS="--cargo-profile wasm-release"
     CARGO_FLAGS="--release"
     echo "🔧 Building in RELEASE mode"
 else

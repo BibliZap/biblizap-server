@@ -90,7 +90,7 @@ pub fn Item(props: &ItemProps) -> Html {
                 // Right Column: Article Content
                 <div class="col">
                     // Title as prominent link
-                    <h5 class="mb-1 lh-base">
+                    <h5 class="mb-1">
                         <a href={doi_link(props.article.doi.clone())} class="article-title-link text-decoration-none text-body fw-semibold" target="_blank" style="font-size: 1.05rem;" onclick={stop_click}>
                             {props.article.title.clone().unwrap_or_else(|| "Untitled Article".to_string())}
                         </a>
