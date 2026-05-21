@@ -280,23 +280,6 @@ enum FetchStatus {
     Error(Error),
 }
 
-fn update_denylist_state_from_hash(
-    hash: Option<[u8; 32]>,
-    denylist_state: UseStateHandle<Option<Vec<String>>>,
-) {
-    if let Some(hash) = hash {
-        spawn_local(async move {
-            let result = download_denylist(hash).await;
-            match result {
-                Ok(dois) => denylist_state.set(Some(dois)),
-                Err(_) => denylist_state.set(None),
-            }
-        });
-    } else {
-        denylist_state.set(None);
-    }
-}
-
 /// The BibliZap results page.
 /// Reads `?ids=` (and optional expert params) from the URL, fetches results on mount,
 /// and renders the results table.
@@ -372,13 +355,36 @@ pub fn BibliZapResults() -> Html {
     let denylist = use_state(|| Option::<Vec<String>>::None);
     {
         let denylist_status = denylist.clone();
-        let denylist_hash = query
-            .denylist_hash
-            .clone()
-            .map(|h| decode_denylist_hash(&h).ok())
-            .flatten();
-        use_effect_with(denylist_hash, move |hash| {
-            update_denylist_state_from_hash(*hash, denylist_status.clone());
+        use_effect_with(query.denylists.clone(), move |denylists_str| {
+            match denylists_str.as_deref() {
+                None | Some("") => denylist_status.set(None),
+                Some(s) => {
+                    let hashes: Vec<[u8; 32]> = s
+                        .split_whitespace()
+                        .filter_map(|h| decode_denylist_hash(h).ok())
+                        .collect();
+                    if hashes.is_empty() {
+                        denylist_status.set(None);
+                    } else {
+                        let denylist_status = denylist_status.clone();
+                        spawn_local(async move {
+                            let mut merged = Vec::new();
+                            for hash in hashes {
+                                if let Ok(dois) = download_denylist(hash).await {
+                                    merged.extend(dois);
+                                }
+                            }
+                            merged.sort_unstable();
+                            merged.dedup();
+                            denylist_status.set(if merged.is_empty() {
+                                None
+                            } else {
+                                Some(merged)
+                            });
+                        });
+                    }
+                }
+            }
             || ()
         });
     }
@@ -389,7 +395,7 @@ pub fn BibliZapResults() -> Html {
         let depth = query.depth;
         let output_max_size = query.output_max_size.clone();
         let search_for = query.search_for.clone();
-        let denylist_hash = query.denylist_hash.clone();
+        let denylists = query.denylists.clone();
         Callback::from(move |ids: Vec<String>| {
             let ids_str = ids.join(" ");
             let _ = navigator.push_with_query(
@@ -399,20 +405,25 @@ pub fn BibliZapResults() -> Html {
                     depth,
                     output_max_size: output_max_size.clone(),
                     search_for: search_for.clone(),
-                    denylist_hash: denylist_hash.clone(),
+                    denylists: denylists.clone(),
                 },
             );
         })
     };
 
-    let on_denylist_change = {
+    let on_denylists_change = {
         let navigator = navigator.clone();
         let query = query.clone();
-        Callback::from(move |hash: Option<[u8; 32]>| {
+        Callback::from(move |hashes: Vec<[u8; 32]>| {
+            let denylists = if hashes.is_empty() {
+                None
+            } else {
+                Some(hashes.iter().map(hex::encode).collect::<Vec<_>>().join(" "))
+            };
             let _ = navigator.replace_with_query(
                 &Route::BibliZapResults,
                 &BibliZapResultsQuery {
-                    denylist_hash: hash.map(hex::encode),
+                    denylists,
                     ..query.clone()
                 },
             );
@@ -426,19 +437,21 @@ pub fn BibliZapResults() -> Html {
                     position={FormPosition::Top}
                     value={ids.join(" ")}
                     advanced={Some(AdvancedParams::from(&query))}
-                    on_denylist_change={on_denylist_change}
+                    on_denylists_change={on_denylists_change}
                 />
             </div>
             <div class="results-fade-in">
             {match fetch_status.deref() {
                 FetchStatus::Loading => html! { <Spinner /> },
                 FetchStatus::Error(msg) => html! { <ErrorMessage msg={msg.to_string()} /> },
-                FetchStatus::Success(articles) => html! {
-                    <Results
-                        articles={articles.clone()}
-                        denylist={(*denylist).clone()}
-                        on_rerun_snowball={on_rerun_snowball}
-                    />
+                FetchStatus::Success(articles) => {
+                    html! {
+                        <Results
+                            articles={articles.clone()}
+                            denylist={(*denylist).clone()}
+                            on_rerun_snowball={on_rerun_snowball}
+                        />
+                    }
                 },
             }}
             </div>

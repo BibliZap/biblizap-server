@@ -21,6 +21,9 @@ enum LoadState {
 #[derive(Clone, PartialEq, Properties)]
 pub struct SeedPickerProps {
     pub bibliography_hash: String,
+    /// Optional hex-encoded SHA-256 hash of an exclusion corpus to pre-filter results.
+    #[prop_or_default]
+    pub exclusion_hash: Option<String>,
 }
 
 #[function_component]
@@ -62,7 +65,11 @@ pub fn SeedPicker(props: &SeedPickerProps) -> Html {
         LoadState::Loading => html! { <Spinner /> },
         LoadState::Error(msg) => html! { <SeedSelectionError {msg} /> },
         LoadState::Loaded(articles) => html! {
-            <SeedSelectionLoaded {articles} bibliography_hash={props.bibliography_hash.clone()} />
+            <SeedSelectionLoaded
+                {articles}
+                bibliography_hash={props.bibliography_hash.clone()}
+                exclusion_hash={props.exclusion_hash.clone()}
+            />
         },
     }
 }
@@ -71,13 +78,14 @@ pub fn SeedPicker(props: &SeedPickerProps) -> Html {
 pub fn SeedSelectionPage() -> Html {
     let location = use_location().unwrap();
 
-    let bibliography_hash = location
-        .query::<SeedSelectionQuery>()
-        .ok()
-        .map(|q| q.bibliography)
+    let query = location.query::<SeedSelectionQuery>().ok();
+    let bibliography_hash = query
+        .as_ref()
+        .map(|q| q.bibliography.clone())
         .unwrap_or_default();
+    let exclusion_hash = query.and_then(|q| q.denylist);
 
-    html! { <SeedPicker {bibliography_hash} /> }
+    html! { <SeedPicker {bibliography_hash} {exclusion_hash} /> }
 }
 
 #[derive(Clone, PartialEq, Properties)]
@@ -99,6 +107,8 @@ fn SeedSelectionError(props: &SeedSelectionErrorProps) -> Html {
 struct SeedSelectionLoadedProps {
     articles: Vec<Article>,
     bibliography_hash: String,
+    #[prop_or_default]
+    exclusion_hash: Option<String>,
 }
 
 #[function_component]
@@ -117,7 +127,8 @@ fn SeedSelectionLoaded(props: &SeedSelectionLoadedProps) -> Html {
 
     let on_run = {
         let selected = selected.clone();
-        let hash = props.bibliography_hash.clone();
+        let bibliography_hash = props.bibliography_hash.clone();
+        let exclusion_hash = props.exclusion_hash.clone();
         Callback::from(move |_: MouseEvent| {
             let ids_str = (*selected).iter().cloned().collect::<Vec<_>>().join(" ");
             if ids_str.is_empty() {
@@ -130,7 +141,13 @@ fn SeedSelectionLoaded(props: &SeedSelectionLoadedProps) -> Html {
                     depth: None,
                     output_max_size: None,
                     search_for: None,
-                    denylist_hash: Some(hash.clone()),
+                    denylists: {
+                        let mut hashes = vec![bibliography_hash.clone()];
+                        if let Some(ref excl) = exclusion_hash {
+                            hashes.push(excl.clone());
+                        }
+                        Some(hashes.join(" "))
+                    },
                 },
             );
         })

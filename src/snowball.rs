@@ -6,6 +6,8 @@ use actix_web::{HttpResponse, Responder, web};
 use biblizap_rs::{SearchFor, lens::cache::postgres::PostgresBackend};
 use serde::Deserialize;
 
+pub const MAX_IDS: usize = 100;
+
 /// Parameters received from the frontend for the snowball search.
 #[derive(Debug, Deserialize)]
 struct SnowballParameters {
@@ -27,7 +29,7 @@ async fn handle_request(
     log::info!("Received request: {:?}", parameters);
 
     // Server-side validation: check max 7 IDs
-    if parameters.input_id_list.len() > 7 {
+    if parameters.input_id_list.len() > MAX_IDS {
         return Err(Error::TooManyIds(parameters.input_id_list.len()));
     }
 

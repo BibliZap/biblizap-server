@@ -1,4 +1,6 @@
-use gloo_file::{callbacks::read_as_text, File, FileReadError};
+use std::collections::HashMap;
+
+use gloo_file::{callbacks::read_as_text, File};
 use wasm_bindgen_futures::spawn_local;
 use web_sys::HtmlInputElement;
 use yew::prelude::*;
@@ -11,12 +13,6 @@ pub enum DenylistError {
     BackendError(u16),
     #[error("Invalid hash format")]
     InvalidHashFormat,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct UploadState {
-    hash: [u8; 32],
-    count: usize,
 }
 
 pub fn decode_denylist_hash(hash_str: &str) -> Result<[u8; 32], DenylistError> {
@@ -59,87 +55,125 @@ pub async fn download_denylist(hash: [u8; 32]) -> Result<Vec<String>, DenylistEr
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum DenylistState {
-    None,
-    Loading,
-    FrontendLoaded(Vec<String>),
-    BackendUploaded(UploadState),
-}
-
 #[derive(Clone, PartialEq, Properties)]
 pub struct DenylistProps {
-    pub on_hash_change: Callback<Option<[u8; 32]>>,
-    #[prop_or_default]
-    pub initial_hash: Option<[u8; 32]>,
-}
-
-fn update_denylist_state_from_hash(
-    hash: Option<[u8; 32]>,
-    denylist_state: UseStateHandle<DenylistState>,
-) {
-    if let Some(hash) = hash {
-        denylist_state.set(DenylistState::Loading);
-        spawn_local(async move {
-            let result = download_denylist(hash).await;
-            match result {
-                Ok(dois) => denylist_state.set(DenylistState::BackendUploaded(UploadState {
-                    hash,
-                    count: dois.len(),
-                })),
-                Err(_) => denylist_state.set(DenylistState::None),
-            }
-        });
-    } else {
-        denylist_state.set(DenylistState::None);
-    }
+    /// Current list of corpus hashes, one per chip.
+    pub hashes: Vec<[u8; 32]>,
+    /// Called when a new file is uploaded; parent should append the hash.
+    pub on_add: Callback<[u8; 32]>,
+    /// Called with the chip index when the user clicks ✕.
+    pub on_remove: Callback<usize>,
 }
 
 #[function_component]
 pub fn Denylist(props: &DenylistProps) -> Html {
-    let denylist_state = use_state(|| DenylistState::None);
-    use_effect_with(props.initial_hash, {
-        let denylist_state = denylist_state.clone();
-        move |hash| update_denylist_state_from_hash(*hash, denylist_state.clone())
-    });
-
+    // Cache hash → article count; each hash is fetched at most once.
+    let count_cache: UseStateHandle<HashMap<[u8; 32], usize>> = use_state(HashMap::new);
+    let uploading = use_state(|| false);
     let reader_task = use_mut_ref(|| None);
 
+    // For any hash not yet in the cache, download it and store its count.
+    use_effect_with(props.hashes.clone(), {
+        let count_cache = count_cache.clone();
+        move |hashes| {
+            let to_fetch: Vec<[u8; 32]> = hashes
+                .iter()
+                .filter(|h| !(*count_cache).contains_key(*h))
+                .copied()
+                .collect();
+            if !to_fetch.is_empty() {
+                let count_cache = count_cache.clone();
+                spawn_local(async move {
+                    for hash in to_fetch {
+                        let count = download_denylist(hash).await.map(|d| d.len()).unwrap_or(0);
+                        let mut new_cache = (*count_cache).clone();
+                        new_cache.insert(hash, count);
+                        count_cache.set(new_cache);
+                    }
+                });
+            }
+            || ()
+        }
+    });
+
     let on_file_change = {
-        let denylist_state = denylist_state.clone();
+        let uploading = uploading.clone();
         let reader_task = reader_task.clone();
-        let on_hash_change = props.on_hash_change.clone();
+        let on_add = props.on_add.clone();
+        let count_cache = count_cache.clone();
         Callback::from(move |e: Event| {
             let input: HtmlInputElement = e.target_unchecked_into();
-            let file = File::from(input.files().unwrap().get(0).unwrap());
-            denylist_state.set(DenylistState::Loading);
-            let file_content = denylist_state.clone();
-            let on_hash_change = on_hash_change.clone();
+            let Some(file) = input.files().and_then(|f| f.get(0)) else {
+                return;
+            };
+            let file = File::from(file);
+            uploading.set(true);
+            let uploading = uploading.clone();
+            let on_add = on_add.clone();
+            let count_cache = count_cache.clone();
             let task = read_as_text(&file, move |result| {
-                apply_file_read(result, file_content.clone(), on_hash_change.clone())
+                let Ok(content) = result else {
+                    uploading.set(false);
+                    return;
+                };
+                let dois = extract_dois(&content).unwrap_or_default();
+                let count = dois.len();
+                spawn_local(async move {
+                    if let Ok(hash) = upload_denylist_to_backend(dois).await {
+                        // Pre-populate cache so the chip shows the count immediately.
+                        let mut new_cache = (*count_cache).clone();
+                        new_cache.insert(hash, count);
+                        count_cache.set(new_cache);
+                        on_add.emit(hash);
+                    }
+                    uploading.set(false);
+                });
             });
             *reader_task.borrow_mut() = Some(task);
         })
     };
 
-    let on_file_remove = {
-        let denylist_state = denylist_state.clone();
-        let on_hash_change = props.on_hash_change.clone();
-        Callback::from(move |_: ()| {
-            denylist_state.set(DenylistState::None);
-            *reader_task.borrow_mut() = None;
-            on_hash_change.emit(None);
-        })
-    };
-
     html! {
-        <div>
-            { match (*denylist_state).clone() {
-                DenylistState::None => html! { <DenylistUploadButton on_file_change={on_file_change} /> },
-                DenylistState::Loading => html! { <DenylistLoading /> },
-                DenylistState::FrontendLoaded(_) => html! { <DenylistLoading /> },
-                DenylistState::BackendUploaded(upload_state) => html! { <DenylistDisplay upload_state={upload_state.clone()} on_file_remove={on_file_remove} /> },
-            }}
+        <div class="d-flex flex-wrap gap-2 align-items-center">
+            { props.hashes.iter().enumerate().map(|(i, hash)| {
+                let count = (*count_cache).get(hash).copied();
+                let on_remove = {
+                    let on_remove = props.on_remove.clone();
+                    Callback::from(move |_: ()| on_remove.emit(i))
+                };
+                html! { <DenylistChip {count} {on_remove} /> }
+            }).collect::<Html>() }
+            if !*uploading {
+                <DenylistUploadButton on_file_change={on_file_change} />
+            } else {
+                <DenylistLoading />
+            }
+        </div>
+    }
+}
+
+#[derive(Clone, PartialEq, Properties)]
+struct DenylistChipProps {
+    /// None = count still loading.
+    count: Option<usize>,
+    on_remove: Callback<()>,
+}
+
+#[function_component]
+fn DenylistChip(props: &DenylistChipProps) -> Html {
+    let on_close = {
+        let on_remove = props.on_remove.clone();
+        Callback::from(move |_: MouseEvent| on_remove.emit(()))
+    };
+    html! {
+        <div class="denylist btn btn-success btn-sm mb-0 d-flex align-items-center gap-2">
+            if let Some(n) = props.count {
+                <span>{ format!("{n} articles excluded") }</span>
+            } else {
+                <div class="spinner-border spinner-border-sm" role="status" />
+                <span>{"Loading..."}</span>
+            }
+            <button class="btn-close btn-close-white btn-sm" aria-label="Remove" onclick={on_close} />
         </div>
     }
 }
@@ -156,7 +190,7 @@ fn DenylistUploadButton(
     html! {
         <label class="btn btn-outline-secondary btn-sm mb-0">
             <i class="bi bi-upload me-1" />
-            {"Upload deny list"}
+            {"Add articles to exclude from results"}
             <input type="file" accept=".ris,.nbib,.bzd" hidden=true onchange={on_file_change} />
         </label>
     }
@@ -167,55 +201,8 @@ fn DenylistLoading() -> Html {
     html! {
         <div class="denylist denylist-loading btn btn-outline-secondary btn-sm mb-0">
             <div class="spinner-border spinner-border-sm" />
-            <span>{"Loading deny list..."}</span>
+            <span>{"Uploading..."}</span>
         </div>
-    }
-}
-
-#[derive(Clone, PartialEq, Properties)]
-struct DenylistDisplayProps {
-    upload_state: UploadState,
-    on_file_remove: Callback<()>,
-}
-
-#[function_component]
-fn DenylistDisplay(props: &DenylistDisplayProps) -> Html {
-    let on_close_click = {
-        let on_file_remove = props.on_file_remove.clone();
-        Callback::from(move |_: MouseEvent| on_file_remove.emit(()))
-    };
-    let hash_hex = hex::encode(props.upload_state.hash);
-    let download_href = format!("/api/denylist/download/{}", hash_hex);
-    let download_filename = format!("denylist_{}.bzd", &hash_hex[..8]);
-    html! {
-        <div class="denylist btn btn-success btn-sm mb-0 d-flex align-items-center gap-2">
-            <a class="text-white text-decoration-none flex-grow-1" href={download_href} download={download_filename}>
-                { format!("{} articles in deny list", props.upload_state.count) }
-            </a>
-            <button class="btn-close btn-close-white btn-sm" aria-label="Remove deny list" onclick={on_close_click} />
-        </div>
-    }
-}
-
-fn apply_file_read(
-    result: Result<String, FileReadError>,
-    file_content: UseStateHandle<DenylistState>,
-    on_hash_change: Callback<Option<[u8; 32]>>,
-) {
-    match result {
-        Ok(content) => {
-            let dois = extract_dois(&content).unwrap_or_default();
-            file_content.set(DenylistState::FrontendLoaded(dois.clone()));
-            spawn_local(async move {
-                let hash = upload_denylist_to_backend(dois.clone()).await.unwrap();
-                on_hash_change.emit(Some(hash));
-                file_content.set(DenylistState::BackendUploaded(UploadState {
-                    hash,
-                    count: dois.len(),
-                }));
-            });
-        }
-        Err(_) => file_content.set(DenylistState::None),
     }
 }
 

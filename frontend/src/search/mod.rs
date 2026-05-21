@@ -55,12 +55,12 @@ pub fn biblizap_search() -> Html {
     }
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct AdvancedParams {
     pub depth: u8,
     pub output_max_size: OutputMaxSize,
     pub search_for: SearchFor,
-    pub denylist_hash: Option<[u8; 32]>,
+    pub denylists: Vec<[u8; 32]>,
 }
 
 impl Default for AdvancedParams {
@@ -69,18 +69,27 @@ impl Default for AdvancedParams {
             depth: 2,
             output_max_size: OutputMaxSize::default(),
             search_for: SearchFor::default(),
-            denylist_hash: None,
+            denylists: vec![],
         }
     }
 }
 
 impl From<&BibliZapResultsQuery> for AdvancedParams {
     fn from(q: &BibliZapResultsQuery) -> Self {
+        let denylists = q
+            .denylists
+            .as_deref()
+            .map(|s| {
+                s.split_whitespace()
+                    .filter_map(|h| hex::decode(h).ok().and_then(|v| v.try_into().ok()))
+                    .collect()
+            })
+            .unwrap_or_default();
         Self {
             depth: q.depth.unwrap_or(2),
             output_max_size: q.output_max_size.unwrap_or_default(),
             search_for: q.search_for.unwrap_or_default(),
-            denylist_hash: q.denylist_hash.clone().and_then(|s| hex::decode(&s).ok().map(|v| v.try_into().unwrap_or_default())),
+            denylists,
         }
     }
 }
@@ -94,10 +103,10 @@ pub struct SearchBarProps {
     /// the advanced panel is auto-opened so users can see their active settings.
     #[prop_or_default]
     pub advanced: Option<AdvancedParams>,
-    /// Optional callback fired immediately when the denylist hash changes (upload or removal).
+    /// Optional callback fired immediately when the denylist list changes (upload or removal).
     /// Used by the results page to reflect the change in the URL without a full re-submit.
     #[prop_or_default]
-    pub on_denylist_change: Option<Callback<Option<[u8; 32]>>>,
+    pub on_denylists_change: Option<Callback<Vec<[u8; 32]>>>,
 }
 
 fn session_get(key: &str) -> Option<String> {
@@ -126,7 +135,7 @@ pub fn biblizap_search_bar(props: &SearchBarProps) -> Html {
     let id_list_node = use_node_ref();
 
     // ── Advanced params init (URL props > sessionStorage > hardcoded defaults) ──
-    let init_advanced = props.advanced.unwrap_or_else(|| {
+    let init_advanced = props.advanced.clone().unwrap_or_else(|| {
         let depth = session_get("bz_depth")
             .and_then(|s| s.parse().ok())
             .unwrap_or(2);
@@ -143,14 +152,20 @@ pub fn biblizap_search_bar(props: &SearchBarProps) -> Html {
                 _ => SearchFor::Both,
             })
             .unwrap_or_default();
-        let denylist_hash: Option<[u8; 32]> = session_get("bz_denylist_hash")
-            .and_then(|s| hex::decode(&s).ok().map(|v| v.try_into().unwrap_or_default()));
-        AdvancedParams { depth, output_max_size, search_for, denylist_hash }
+        let denylists: Vec<[u8; 32]> = session_get("bz_denylists")
+            .map(|s| {
+                s.split_whitespace()
+                    .filter_map(|h| hex::decode(h).ok().and_then(|v| v.try_into().ok()))
+                    .collect()
+            })
+            .unwrap_or_default();
+        AdvancedParams { depth, output_max_size, search_for, denylists }
     });
 
     // Auto-open panel if URL params are non-default.
     let init_open = props.advanced
-        .map(|p| p != AdvancedParams::default())
+        .as_ref()
+        .map(|p| p != &AdvancedParams::default())
         .unwrap_or(false)
         || session_get("bz_show_advanced").as_deref() == Some("1");
 
@@ -158,13 +173,13 @@ pub fn biblizap_search_bar(props: &SearchBarProps) -> Html {
     let show_advanced = use_state(|| init_open);
 
     // Keep in sync when URL-sourced props change (e.g. navigating between result pages).
-    use_effect_with(props.advanced, {
+    use_effect_with(props.advanced.clone(), {
         let advanced_params = advanced_params.clone();
         let show_advanced = show_advanced.clone();
         move |p| {
             if let Some(p) = p {
-                advanced_params.set(*p);
-                if *p != AdvancedParams::default() {
+                advanced_params.set(p.clone());
+                if p != &AdvancedParams::default() {
                     show_advanced.set(true);
                 }
             }
@@ -231,7 +246,7 @@ pub fn biblizap_search_bar(props: &SearchBarProps) -> Html {
                     return;
                 }
 
-                let p = *advanced_params;
+                let p = (*advanced_params).clone();
                 let ids_str = ids.join(" ");
 
                 gloo_console::log!(format!("Form position: {:#?}", position));
@@ -244,7 +259,11 @@ pub fn biblizap_search_bar(props: &SearchBarProps) -> Html {
                         depth: Some(p.depth),
                         output_max_size: Some(p.output_max_size),
                         search_for: Some(p.search_for),
-                        denylist_hash: p.denylist_hash.map(hex::encode),
+                        denylists: if p.denylists.is_empty() {
+                            None
+                        } else {
+                            Some(p.denylists.iter().map(hex::encode).collect::<Vec<_>>().join(" "))
+                        },
                     },
                     position.next(),
                 );
@@ -271,7 +290,7 @@ pub fn biblizap_search_bar(props: &SearchBarProps) -> Html {
                 </div>
                 <div id="idInputHelp" class="form-text">{"Enter DOIs or PMIDs to run BibliZap directly, or enter keywords to search PubMed first."}</div>
             </div>
-            <SearchAdvancedPanel show_advanced={show_advanced.clone()} advanced_params={advanced_params.clone()} on_denylist_change={props.on_denylist_change.clone()} />
+            <SearchAdvancedPanel show_advanced={show_advanced.clone()} advanced_params={advanced_params.clone()} on_denylists_change={props.on_denylists_change.clone()} />
         </form>
     }
 }
@@ -310,7 +329,7 @@ struct SearchAdvancedPanelProps {
     show_advanced: UseStateHandle<bool>,
     advanced_params: UseStateHandle<AdvancedParams>,
     #[prop_or_default]
-    on_denylist_change: Option<Callback<Option<[u8; 32]>>>,
+    on_denylists_change: Option<Callback<Vec<[u8; 32]>>>,
 }
 #[function_component]
 fn SearchAdvancedPanel(props: &SearchAdvancedPanelProps) -> Html {
@@ -340,7 +359,7 @@ fn SearchAdvancedPanel(props: &SearchAdvancedPanelProps) -> Html {
             let val = e.target_unchecked_into::<web_sys::HtmlInputElement>().value();
             let depth = val.parse().unwrap_or(2);
             session_set("bz_depth", &val);
-            advanced_params.set(AdvancedParams { depth, ..*advanced_params });
+            advanced_params.set(AdvancedParams { depth, ..(*advanced_params).clone() });
         })
     };
 
@@ -353,7 +372,7 @@ fn SearchAdvancedPanel(props: &SearchAdvancedPanelProps) -> Html {
                 "All" => OutputMaxSize::All,
                 n => n.parse().ok().map(OutputMaxSize::Limit).unwrap_or_default(),
             };
-            advanced_params.set(AdvancedParams { output_max_size, ..*advanced_params });
+            advanced_params.set(AdvancedParams { output_max_size, ..(*advanced_params).clone() });
         })
     };
 
@@ -367,19 +386,38 @@ fn SearchAdvancedPanel(props: &SearchAdvancedPanelProps) -> Html {
                 "References" => SearchFor::References,
                 _ => SearchFor::Both,
             };
-            advanced_params.set(AdvancedParams { search_for, ..*advanced_params });
+            advanced_params.set(AdvancedParams { search_for, ..(*advanced_params).clone() });
         })
     };
 
-    let on_hash_change = {
+    let on_add = {
         let advanced_params = advanced_params.clone();
-        let on_denylist_change = props.on_denylist_change.clone();
-        Callback::from(move |hash: Option<[u8; 32]>| {
-            let hash_str = hash.map(|h| hex::encode(h)).unwrap_or_default();
-            session_set("bz_denylist_hash", &hash_str);
-            advanced_params.set(AdvancedParams { denylist_hash: hash, ..*advanced_params });
-            if let Some(cb) = &on_denylist_change {
-                cb.emit(hash);
+        let on_denylists_change = props.on_denylists_change.clone();
+        Callback::from(move |hash: [u8; 32]| {
+            let mut new_denylists = (*advanced_params).denylists.clone();
+            new_denylists.push(hash);
+            let hash_str = new_denylists.iter().map(hex::encode).collect::<Vec<_>>().join(" ");
+            session_set("bz_denylists", &hash_str);
+            advanced_params.set(AdvancedParams { denylists: new_denylists.clone(), ..(*advanced_params).clone() });
+            if let Some(cb) = &on_denylists_change {
+                cb.emit(new_denylists);
+            }
+        })
+    };
+
+    let on_remove = {
+        let advanced_params = advanced_params.clone();
+        let on_denylists_change = props.on_denylists_change.clone();
+        Callback::from(move |i: usize| {
+            let mut new_denylists = (*advanced_params).denylists.clone();
+            if i < new_denylists.len() {
+                new_denylists.remove(i);
+            }
+            let hash_str = new_denylists.iter().map(hex::encode).collect::<Vec<_>>().join(" ");
+            session_set("bz_denylists", &hash_str);
+            advanced_params.set(AdvancedParams { denylists: new_denylists.clone(), ..(*advanced_params).clone() });
+            if let Some(cb) = &on_denylists_change {
+                cb.emit(new_denylists);
             }
         })
     };
@@ -422,7 +460,7 @@ fn SearchAdvancedPanel(props: &SearchAdvancedPanelProps) -> Html {
                         <option value="References" selected={advanced_params.search_for == SearchFor::References}>{"References"}</option>
                     </select>
                 </div>
-                <Denylist on_hash_change={on_hash_change} initial_hash={advanced_params.denylist_hash} />
+                <Denylist hashes={(*advanced_params).denylists.clone()} {on_add} {on_remove} />
             </div>
         </div>
     </div>

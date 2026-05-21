@@ -43,7 +43,7 @@ pub enum Error {
     CorpusError(#[from] corpus::CorpusError),
     #[error("Invalid identifier format: '{0}' is neither a valid DOI nor PMID")]
     InvalidIdFormat(String),
-    #[error("Too many identifiers: maximum 7 allowed, got {0}")]
+    #[error("Too many identifiers: maximum {MAX_IDS} allowed, got {0}")]
     TooManyIds(usize),
     #[error("No valid identifiers provided")]
     NoValidIds,

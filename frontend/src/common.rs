@@ -76,8 +76,9 @@ pub struct BibliZapResultsQuery {
     /// Search direction. Defaults to `Both` when absent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub search_for: Option<SearchFor>,
+    /// Space-separated hex-encoded SHA-256 hashes of denylist corpora.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub denylist_hash: Option<String>,
+    pub denylists: Option<String>,
 }
 
 /// Prop for `SnowballForm` indicating the form's current position.
@@ -136,8 +137,11 @@ pub enum Route {
 /// Query params for `/seed-selection?bibliography=…`
 #[derive(Clone, PartialEq, Debug, serde::Serialize, serde::Deserialize)]
 pub struct SeedSelectionQuery {
-    /// Hex-encoded SHA-256 hash of the uploaded corpus.
+    /// Hex-encoded SHA-256 hash of the uploaded bibliography corpus.
     pub bibliography: String,
+    /// Hex-encoded SHA-256 hash of the optional exclusion corpus.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub denylist: Option<String>,
 }
 
 /// Enum representing the direction of the snowball search.
