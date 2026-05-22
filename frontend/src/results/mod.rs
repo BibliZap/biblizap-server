@@ -44,6 +44,8 @@ pub struct ResultsProps {
     articles: Vec<Article>,
     denylist: Option<Vec<String>>,
     on_rerun_snowball: Callback<Vec<String>>,
+    #[prop_or_default]
+    seed_ids: HashSet<String>,
 }
 
 /// Component for displaying the search results in a table.
@@ -168,15 +170,19 @@ pub fn Results(props: &ResultsProps) -> Html {
 
             // Modern List View
             <div class="result-items-list">
-                { articles_slice.iter().enumerate().map(|(i, article)| html!{
+                { articles_slice.iter().enumerate().map(|(i, article)| {
+                    let is_seed = article.doi.as_ref().map_or(false, |d| props.seed_ids.contains(d))
+                        || article.pmid.as_ref().map_or(false, |p| props.seed_ids.contains(p));
+                    html!{
                     <Item
                         key={article.doi.clone().unwrap_or_else(|| i.to_string())}
                         article={article.clone()}
                         index={i}
                         update_selected={update_selected.clone()}
                         selected_articles={(*selected_articles).clone()}
+                        {is_seed}
                     />
-                } ).collect::<Html>() }
+                }} ).collect::<Html>() }
             </div>
 
             <LoadMoreArticlesButton
@@ -445,11 +451,14 @@ pub fn BibliZapResults() -> Html {
                 FetchStatus::Loading => html! { <Spinner /> },
                 FetchStatus::Error(msg) => html! { <ErrorMessage msg={msg.to_string()} /> },
                 FetchStatus::Success(articles) => {
+                    let seed_ids: HashSet<String> =
+                        ids.iter().map(|s| s.to_lowercase()).collect();
                     html! {
                         <Results
                             articles={articles.clone()}
                             denylist={(*denylist).clone()}
                             on_rerun_snowball={on_rerun_snowball}
+                            {seed_ids}
                         />
                     }
                 },

@@ -10,6 +10,8 @@ pub struct ItemProps {
     pub index: usize,
     pub update_selected: Callback<(String, bool)>,
     pub selected_articles: HashSet<String>,
+    #[prop_or_default]
+    pub is_seed: bool,
 }
 
 #[derive(Clone, PartialEq, Properties)]
@@ -162,6 +164,9 @@ pub fn Item(props: &ItemProps) -> Html {
                         <a href={props.article.article_link()} class="article-title-link text-decoration-none text-body fw-semibold" target="_blank" style="font-size: 1.05rem;" onclick={stop_click}>
                             {props.article.title.clone().unwrap_or_else(|| "Untitled Article".to_string())}
                         </a>
+                        if props.is_seed {
+                            <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 ms-2 align-middle" style="font-size: 0.7rem; font-weight: 500;">{ "Seed" }</span>
+                        }
                     </h5>
                     <div class="mb-2 text-muted" style="font-size: 0.95rem;">
                         {props.article.first_author.clone().unwrap_or_else(|| "Unknown Author".to_string())}
