@@ -24,6 +24,10 @@ pub struct SeedPickerProps {
     /// Optional hex-encoded SHA-256 hash of an exclusion corpus to pre-filter results.
     #[prop_or_default]
     pub exclusion_hash: Option<String>,
+    /// Whether the bibliography corpus itself should be added to the BibliZap denylist.
+    /// `true` for systematic reviews (already-read papers), `false` for PubMed keyword searches.
+    #[prop_or(true)]
+    pub use_bibliography_as_denylist: bool,
 }
 
 #[function_component]
@@ -69,6 +73,7 @@ pub fn SeedPicker(props: &SeedPickerProps) -> Html {
                 {articles}
                 bibliography_hash={props.bibliography_hash.clone()}
                 exclusion_hash={props.exclusion_hash.clone()}
+                use_bibliography_as_denylist={props.use_bibliography_as_denylist}
             />
         },
     }
@@ -109,6 +114,8 @@ struct SeedSelectionLoadedProps {
     bibliography_hash: String,
     #[prop_or_default]
     exclusion_hash: Option<String>,
+    #[prop_or(true)]
+    use_bibliography_as_denylist: bool,
 }
 
 #[function_component]
@@ -129,11 +136,19 @@ fn SeedSelectionLoaded(props: &SeedSelectionLoadedProps) -> Html {
         let selected = selected.clone();
         let bibliography_hash = props.bibliography_hash.clone();
         let exclusion_hash = props.exclusion_hash.clone();
+        let use_bibliography_as_denylist = props.use_bibliography_as_denylist;
         Callback::from(move |_: MouseEvent| {
             let ids_str = (*selected).iter().cloned().collect::<Vec<_>>().join(" ");
             if ids_str.is_empty() {
                 return;
             }
+            let denylist_hashes: Vec<String> = [
+                use_bibliography_as_denylist.then(|| bibliography_hash.clone()),
+                exclusion_hash.clone(),
+            ]
+            .into_iter()
+            .flatten()
+            .collect();
             let _ = navigator.push_with_query(
                 &Route::BibliZapResults,
                 &BibliZapResultsQuery {
@@ -141,13 +156,7 @@ fn SeedSelectionLoaded(props: &SeedSelectionLoadedProps) -> Html {
                     depth: None,
                     output_max_size: None,
                     search_for: None,
-                    denylists: {
-                        let mut hashes = vec![bibliography_hash.clone()];
-                        if let Some(ref excl) = exclusion_hash {
-                            hashes.push(excl.clone());
-                        }
-                        Some(hashes.join(" "))
-                    },
+                    denylists: (!denylist_hashes.is_empty()).then(|| denylist_hashes.join(" ")),
                 },
             );
         })

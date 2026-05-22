@@ -107,7 +107,9 @@ pub fn pubmed_results_page() -> Html {
     let content = match &*page_state {
         PageState::Loading => html! { <Spinner /> },
         PageState::Error(msg) => html! { <ErrorMessage msg={msg.clone()} /> },
-        PageState::Loaded(hash) => html! { <SeedPicker bibliography_hash={hash.clone()} /> },
+        PageState::Loaded(hash) => {
+            html! { <SeedPicker bibliography_hash={hash.clone()} use_bibliography_as_denylist={false} /> }
+        }
     };
 
     html! {
