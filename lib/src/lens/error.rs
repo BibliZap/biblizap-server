@@ -22,6 +22,8 @@ pub enum LensError {
     #[cfg(any(feature = "cache-sqlite", feature = "cache-postgres"))]
     #[error("Database error: {0}")]
     SqlxError(#[from] sqlx::Error),
+    #[error("System clock error: {0}")]
+    SystemTimeError(#[from] std::time::SystemTimeError),
 }
 
 #[derive(Error, Debug)]
@@ -40,7 +42,11 @@ pub struct LensApiErrorInfo {
 // Shown to users
 impl std::fmt::Display for LensApiErrorInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Lens API replied with status {}, please ask your administrator if his API key is valid", self.status_code)
+        write!(
+            f,
+            "Lens API replied with status {}, please ask your administrator if his API key is valid",
+            self.status_code
+        )
     }
 }
 

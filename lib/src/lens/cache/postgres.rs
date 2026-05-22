@@ -76,6 +76,19 @@ pub struct PostgresBackend {
     pool: PgPool,
 }
 
+impl PostgresBackend {
+    /// Get current Unix timestamp.
+    ///
+    /// Returns an error if the system clock is set before Unix epoch (Jan 1, 1970),
+    /// which would indicate a serious system clock issue.
+    fn get_unix_timestamp() -> Result<i64, LensError> {
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)?
+            .as_secs() as i64;
+        Ok(timestamp)
+    }
+}
+
 #[async_trait]
 impl CacheBackend for PostgresBackend {
     async fn get_references(
@@ -116,10 +129,7 @@ impl CacheBackend for PostgresBackend {
         // Start transaction for all chunks
         let mut tx = self.pool.begin().await?;
 
-        let rough_timestamp = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs() as i64;
+        let rough_timestamp = Self::get_unix_timestamp()?;
 
         for chunk in batch.chunks(CHUNK_SIZE) {
             // Pre-serialize all JSON (handles errors before building query)
@@ -165,11 +175,7 @@ impl CacheBackend for PostgresBackend {
         }
 
         // Calculate timestamp for 2 weeks ago (in Unix epoch seconds)
-        let two_weeks_ago = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs() as i64
-            - (14 * 24 * 60 * 60); // 14 days in seconds
+        let two_weeks_ago = Self::get_unix_timestamp()? - (14 * 24 * 60 * 60); // 14 days in seconds
 
         // Use PostgreSQL's native array operations + timestamp filter
         let ids_vec: Vec<String> = ids.iter().map(|id| id.as_ref().to_string()).collect();
@@ -200,10 +206,7 @@ impl CacheBackend for PostgresBackend {
         // Start transaction for all chunks
         let mut tx = self.pool.begin().await?;
 
-        let rough_timestamp = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs() as i64;
+        let rough_timestamp = Self::get_unix_timestamp()?;
 
         for chunk in batch.chunks(CHUNK_SIZE) {
             // Pre-serialize all JSON (handles errors before building query)
@@ -277,10 +280,7 @@ impl CacheBackend for PostgresBackend {
         // Start transaction for all chunks
         let mut tx = self.pool.begin().await?;
 
-        let rough_timestamp = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs() as i64;
+        let rough_timestamp = Self::get_unix_timestamp()?;
 
         for chunk in batch.chunks(CHUNK_SIZE) {
             // Pre-serialize all JSON (handles errors before building query)
@@ -355,10 +355,7 @@ impl CacheBackend for PostgresBackend {
 
         let mut tx = self.pool.begin().await?;
 
-        let rough_timestamp = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs() as i64;
+        let rough_timestamp = Self::get_unix_timestamp()?;
 
         for chunk in batch.chunks(CHUNK_SIZE) {
             let rows: Vec<(String, String, i64)> = chunk
@@ -391,10 +388,7 @@ impl CacheBackend for PostgresBackend {
 
     async fn mark_as_fetching(&self, id: &LensId) -> Result<bool, LensError> {
         let id_str = id.as_ref().to_string();
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs() as i64;
+        let now = Self::get_unix_timestamp()?;
 
         // Stale threshold: 60 seconds
         let stale_threshold = now - 60;
@@ -432,10 +426,7 @@ impl CacheBackend for PostgresBackend {
 
     async fn is_being_fetched(&self, id: &LensId) -> Result<bool, LensError> {
         let id_str = id.as_ref().to_string();
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs() as i64;
+        let now = Self::get_unix_timestamp()?;
 
         let stale_threshold = now - 60;
 
@@ -461,10 +452,7 @@ impl CacheBackend for PostgresBackend {
             return Ok(Vec::new());
         }
 
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs() as i64;
+        let now = Self::get_unix_timestamp()?;
         let stale_threshold = now - 60;
 
         let ids_vec: Vec<String> = ids.iter().map(|id| id.as_ref().to_string()).collect();
@@ -738,7 +726,10 @@ mod tests {
         let pool = PgPool::connect(&url).await.map_err(LensError::SqlxError)?;
 
         // Create isolated schema for this test
-        sqlx::query(&format!("CREATE SCHEMA {schema_name}"))
+        // SAFETY: schema_name is constructed from numeric timestamp and nanos,
+        // so it only contains digits and underscores - no SQL injection possible
+        let create_schema_sql = format!("CREATE SCHEMA {schema_name}");
+        sqlx::raw_sql(sqlx::AssertSqlSafe(create_schema_sql))
             .execute(&pool)
             .await?;
 

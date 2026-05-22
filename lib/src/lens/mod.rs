@@ -1053,7 +1053,8 @@ mod tests {
 
         // Create schema and backend
         let pool = sqlx::PgPool::connect(&db_url).await.unwrap();
-        sqlx::query(&format!("CREATE SCHEMA {schema_name}"))
+        let query = format!("CREATE SCHEMA {schema_name}");
+        sqlx::raw_sql(sqlx::AssertSqlSafe(query))
             .execute(&pool)
             .await
             .unwrap();
@@ -1128,10 +1129,11 @@ mod tests {
 
         // Cleanup: drop schema
         let pool = sqlx::PgPool::connect(&db_url).await.unwrap();
-        sqlx::query(&format!("DROP SCHEMA IF EXISTS {schema_name} CASCADE"))
+        let query = format!("DROP SCHEMA IF EXISTS {schema_name} CASCADE");
+        sqlx::raw_sql(sqlx::AssertSqlSafe(query))
             .execute(&pool)
             .await
-            .ok();
+            .unwrap();
         pool.close().await;
 
         println!("✓ snowball with Postgres cache works correctly!");
