@@ -4,6 +4,7 @@ use biblizap_rs::lens::cache::postgres::PostgresBackend;
 use config as conf;
 use serde::Deserialize;
 use std::env;
+use std::path::PathBuf;
 use thiserror::Error;
 
 mod common;
@@ -28,6 +29,7 @@ struct AppConfig {
 struct FileConfig {
     lens_api_key: Option<String>,
     cache_backend_url: Option<String>,
+    openalex_dump_path: Option<PathBuf>,
     bind_address: Option<String>,
     port: Option<u16>,
 }
@@ -125,6 +127,20 @@ async fn main() -> std::io::Result<()> {
             );
             std::process::exit(1);
         });
+
+    let openalex_dump_path = args
+        .openalex_dump_path
+        .clone()
+        .or(file_cfg.openalex_dump_path)
+        .or_else(|| {
+            env::var("BIBLIZAP_OPENALEX_DUMP_PATH")
+                .ok()
+                .map(PathBuf::from)
+        });
+
+    if let Some(path) = &openalex_dump_path {
+        log::info!("Configured OpenAlex dump path: {}", path.display());
+    }
 
     // For heavy IO workload with 4 workers per CPU
     let worker_count = num_cpus::get() * 4 * 2;
@@ -232,6 +248,7 @@ Values available in the config:
     - port
     - lens_api_key
     - cache_backend_url
+    - openalex_dump_path
 
 Secrets (Lens API key and Cache URL): prefer keeping `biblizap.toml` file mode 600, or set BIBLIZAP_LENS_API_KEY.
 
@@ -245,6 +262,10 @@ struct Args {
     /// An URL to a working postgresql cache database (optional; can come from config or env)
     #[arg(short, long)]
     cache_backend_url: Option<String>,
+
+    /// Path to an OpenAlex gzipped JSON/JSONL dump file or dump directory
+    #[arg(long)]
+    openalex_dump_path: Option<PathBuf>,
 
     /// Address to bind the server (optional; overrides config)
     #[arg(short, long)]

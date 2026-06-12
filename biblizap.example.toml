@@ -7,6 +7,10 @@
 # bind_address = "127.0.0.1"
 # port = 35642
 
+# Optional: OpenAlex import source. This can point to a gzipped JSON/JSONL file
+# or, later, a dump directory once the importer supports walking snapshots.
+# openalex_dump_path = "/data/openalex/works/updated_date=2026-06-01/part_000.gz"
+
 # To set the Lens API key in this file, uncomment and replace the value below.
 # Make sure this file is readable only by the owner (chmod 600) if it contains secrets.
 # lens_api_key = "REPLACE_WITH_YOUR_LENS_API_KEY"

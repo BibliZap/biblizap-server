@@ -118,6 +118,8 @@ Configuration keys available in the TOML file:
 - `bind_address` (string) — address to bind the HTTP server, e.g. `"127.0.0.1"`
 - `port` (integer) — port to listen on, e.g. `35642`
 - `lens_api_key` (string) — your Lens.org API key (keep file mode 600 if populated)
+- `cache_backend_url` (string) — PostgreSQL URL for the Lens cache backend
+- `openalex_dump_path` (string) — optional path to an OpenAlex gzipped JSON/JSONL dump file or dump directory
 
 Examples:
 
@@ -127,9 +129,11 @@ Examples:
 bind_address = "127.0.0.1"
 port = 35642
 lens_api_key = "REPLACE_WITH_YOUR_LENS_KEY"
+cache_backend_url = "postgres://biblizap:password@localhost/biblizap_cache"
+openalex_dump_path = "/data/openalex/works/part_000.gz"
 ```
 
-CLI flags override values in the config file. You can also supply the Lens API key using the environment variable `BIBLIZAP_LENS_API_KEY`.
+CLI flags override values in the config file. You can also supply config values using environment variables with the `BIBLIZAP_` prefix, such as `BIBLIZAP_LENS_API_KEY` and `BIBLIZAP_OPENALEX_DUMP_PATH`.
 
 ### Running the Server
 

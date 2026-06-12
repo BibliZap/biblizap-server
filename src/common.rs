@@ -3,9 +3,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 /// Validates if a string is a valid DOI.
 /// DOIs start with "10." followed by at least 4 digits, a "/", and a suffix.
 pub fn is_valid_doi(s: &str) -> bool {
-    s.starts_with("10.") 
+    s.starts_with("10.")
         && s.len() > 7  // Minimum: "10.1234/x"
-        && s.contains('/') 
+        && s.contains('/')
         && s.chars().skip(3).take_while(|c| c.is_ascii_digit()).count() >= 4
 }
 

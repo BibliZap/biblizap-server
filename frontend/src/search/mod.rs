@@ -1,19 +1,18 @@
 use yew::prelude::*;
 use yew_router::prelude::*;
 
-
 pub mod denylist;
 use denylist::*;
 
-use crate::common::{get_value, BibliZapResultsQuery, FormPosition};
 use crate::common::*;
+use crate::common::{get_value, BibliZapResultsQuery, FormPosition};
 
 /// Validates if a string is a valid DOI.
 /// DOIs start with "10." followed by at least 4 digits, a "/", and a suffix.
 fn is_valid_doi(s: &str) -> bool {
-    s.starts_with("10.") 
+    s.starts_with("10.")
         && s.len() > 7  // Minimum: "10.1234/x"
-        && s.contains('/') 
+        && s.contains('/')
         && s.chars().skip(3).take_while(|c| c.is_ascii_digit()).count() >= 4
 }
 
@@ -43,7 +42,6 @@ fn contains_keywords(input: &str) -> bool {
 pub struct PubMedResultsQuery {
     pub q: String,
 }
-
 
 /// Landing page — just the centered search form.
 #[function_component(BibliZapSearchPage)]
@@ -123,7 +121,6 @@ fn session_set(key: &str, val: &str) {
     }
 }
 
-
 /// Component for the snowball search form.
 /// Allows users to input IDs or keywords, select depth, max results, and search direction.
 /// On submit, navigates to `/pubmed-results?q=…` or `/biblizap-results?ids=…`.
@@ -159,11 +156,17 @@ pub fn biblizap_search_bar(props: &SearchBarProps) -> Html {
                     .collect()
             })
             .unwrap_or_default();
-        AdvancedParams { depth, output_max_size, search_for, denylists }
+        AdvancedParams {
+            depth,
+            output_max_size,
+            search_for,
+            denylists,
+        }
     });
 
     // Auto-open panel if URL params are non-default.
-    let init_open = props.advanced
+    let init_open = props
+        .advanced
         .as_ref()
         .map(|p| p != &AdvancedParams::default())
         .unwrap_or(false)
@@ -262,7 +265,13 @@ pub fn biblizap_search_bar(props: &SearchBarProps) -> Html {
                         denylists: if p.denylists.is_empty() {
                             None
                         } else {
-                            Some(p.denylists.iter().map(hex::encode).collect::<Vec<_>>().join(" "))
+                            Some(
+                                p.denylists
+                                    .iter()
+                                    .map(hex::encode)
+                                    .collect::<Vec<_>>()
+                                    .join(" "),
+                            )
                         },
                     },
                     position.next(),
@@ -295,14 +304,13 @@ pub fn biblizap_search_bar(props: &SearchBarProps) -> Html {
     }
 }
 
-
 #[derive(Clone, PartialEq, Properties)]
 struct SearchGearProps {
     show_advanced: UseStateHandle<bool>,
 }
 #[function_component]
 fn SearchGear(props: &SearchGearProps) -> Html {
-        // ── Gear button toggle ──
+    // ── Gear button toggle ──
     let on_gear_click = {
         let show_advanced = props.show_advanced.clone();
         Callback::from(move |_: web_sys::MouseEvent| {
@@ -352,41 +360,56 @@ fn SearchAdvancedPanel(props: &SearchAdvancedPanelProps) -> Html {
         SearchFor::Citations => "Citations".to_string(),
         SearchFor::References => "References".to_string(),
     };
-        // ── Select onchange callbacks ──
+    // ── Select onchange callbacks ──
     let on_depth_change = {
         let advanced_params = advanced_params.clone();
         Callback::from(move |e: web_sys::Event| {
-            let val = e.target_unchecked_into::<web_sys::HtmlInputElement>().value();
+            let val = e
+                .target_unchecked_into::<web_sys::HtmlInputElement>()
+                .value();
             let depth = val.parse().unwrap_or(2);
             session_set("bz_depth", &val);
-            advanced_params.set(AdvancedParams { depth, ..(*advanced_params).clone() });
+            advanced_params.set(AdvancedParams {
+                depth,
+                ..(*advanced_params).clone()
+            });
         })
     };
 
     let on_max_change = {
         let advanced_params = advanced_params.clone();
         Callback::from(move |e: web_sys::Event| {
-            let val = e.target_unchecked_into::<web_sys::HtmlInputElement>().value();
+            let val = e
+                .target_unchecked_into::<web_sys::HtmlInputElement>()
+                .value();
             session_set("bz_output_max_size", &val);
             let output_max_size = match val.as_str() {
                 "All" => OutputMaxSize::All,
                 n => n.parse().ok().map(OutputMaxSize::Limit).unwrap_or_default(),
             };
-            advanced_params.set(AdvancedParams { output_max_size, ..(*advanced_params).clone() });
+            advanced_params.set(AdvancedParams {
+                output_max_size,
+                ..(*advanced_params).clone()
+            });
         })
     };
 
     let on_search_for_change = {
         let advanced_params = advanced_params.clone();
         Callback::from(move |e: web_sys::Event| {
-            let val = e.target_unchecked_into::<web_sys::HtmlInputElement>().value();
+            let val = e
+                .target_unchecked_into::<web_sys::HtmlInputElement>()
+                .value();
             session_set("bz_search_for", &val);
             let search_for = match val.as_str() {
                 "Citations" => SearchFor::Citations,
                 "References" => SearchFor::References,
                 _ => SearchFor::Both,
             };
-            advanced_params.set(AdvancedParams { search_for, ..(*advanced_params).clone() });
+            advanced_params.set(AdvancedParams {
+                search_for,
+                ..(*advanced_params).clone()
+            });
         })
     };
 
@@ -396,9 +419,16 @@ fn SearchAdvancedPanel(props: &SearchAdvancedPanelProps) -> Html {
         Callback::from(move |hash: [u8; 32]| {
             let mut new_denylists = (*advanced_params).denylists.clone();
             new_denylists.push(hash);
-            let hash_str = new_denylists.iter().map(hex::encode).collect::<Vec<_>>().join(" ");
+            let hash_str = new_denylists
+                .iter()
+                .map(hex::encode)
+                .collect::<Vec<_>>()
+                .join(" ");
             session_set("bz_denylists", &hash_str);
-            advanced_params.set(AdvancedParams { denylists: new_denylists.clone(), ..(*advanced_params).clone() });
+            advanced_params.set(AdvancedParams {
+                denylists: new_denylists.clone(),
+                ..(*advanced_params).clone()
+            });
             if let Some(cb) = &on_denylists_change {
                 cb.emit(new_denylists);
             }
@@ -413,9 +443,16 @@ fn SearchAdvancedPanel(props: &SearchAdvancedPanelProps) -> Html {
             if i < new_denylists.len() {
                 new_denylists.remove(i);
             }
-            let hash_str = new_denylists.iter().map(hex::encode).collect::<Vec<_>>().join(" ");
+            let hash_str = new_denylists
+                .iter()
+                .map(hex::encode)
+                .collect::<Vec<_>>()
+                .join(" ");
             session_set("bz_denylists", &hash_str);
-            advanced_params.set(AdvancedParams { denylists: new_denylists.clone(), ..(*advanced_params).clone() });
+            advanced_params.set(AdvancedParams {
+                denylists: new_denylists.clone(),
+                ..(*advanced_params).clone()
+            });
             if let Some(cb) = &on_denylists_change {
                 cb.emit(new_denylists);
             }
