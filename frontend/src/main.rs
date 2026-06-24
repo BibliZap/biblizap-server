@@ -30,6 +30,9 @@ use pubmed::*;
 
 use yew_router::prelude::*;
 
+mod usage;
+use usage::*;
+
 use crate::common::Route;
 
 /// The main application component.
@@ -51,9 +54,9 @@ fn app() -> Html {
         <BrowserRouter>
         <div class="d-flex flex-column min-vh-100">
             <NavBar dark_mode={dark_mode}/>
-            <div class="container my-4">
+                <div class="container my-4">
                     <Switch<Route> render={switch} />
-            </div>
+                </div>
             <Wall/>
         </div>
         </BrowserRouter>
@@ -71,6 +74,7 @@ fn switch(routes: Route) -> Html {
         Route::Contact => html! { <Contact /> },
         Route::LegalInformation => html! { <LegalInformation /> },
         Route::NotFound => html! { <BibliZapSearchPage/> },
+        Route::Usage => html! { <UsageResultsPage /> },
     }
 }
 

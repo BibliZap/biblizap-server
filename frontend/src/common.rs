@@ -132,6 +132,8 @@ pub enum Route {
     #[not_found]
     #[at("/404")]
     NotFound,
+    #[at("/usage")]
+    Usage,
 }
 
 /// Query params for `/seed-selection?bibliography=…`

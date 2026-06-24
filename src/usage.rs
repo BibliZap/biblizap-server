@@ -33,11 +33,6 @@ impl SamplingTime {
     }
 }
 
-#[derive(Debug, serde::Deserialize, Clone, PartialEq, Eq, Hash)]
-struct UsageInfoParameters {
-    sampling_time: SamplingTime,
-}
-
 async fn db_get_usage_info(
     pool: &sqlx::PgPool,
     sampling_time: SamplingTime,
@@ -68,8 +63,8 @@ async fn handle_request(
     req_body: &str,
     config: web::Data<AppConfig>,
 ) -> Result<HashMap<i64, i64>, Error> {
-    let parameters = serde_json::from_str::<UsageInfoParameters>(req_body)?;
-    let usage_info = db_get_usage_info(&config.database_pool, parameters.sampling_time).await?;
+    let sampling_time = serde_json::from_str::<SamplingTime>(req_body)?;
+    let usage_info = db_get_usage_info(&config.database_pool, sampling_time).await?;
     Ok(usage_info)
 }
 
