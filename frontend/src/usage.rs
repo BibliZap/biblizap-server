@@ -80,6 +80,14 @@ impl From<HashMap<i32, i64>> for UsageData {
 }
 
 impl UsageData {
+    fn get_first_date(&self) -> Option<time::Date> {
+        self.data
+            .keys()
+            .min()
+            .map(|&julian| time::Date::from_julian_day(julian).ok())
+            .flatten()
+    }
+
     fn get_total_requests(&self) -> i64 {
         self.data.values().sum()
     }
@@ -189,7 +197,9 @@ struct UsageProps {
 fn UsageContainer(UsageProps { data }: &UsageProps) -> Html {
     let iterator = UsageBinIterator {
         usage_data: data,
-        current_start_date: time::OffsetDateTime::now_utc().date() - time::Duration::days(30),
+        current_start_date: data
+            .get_first_date()
+            .unwrap_or(time::OffsetDateTime::now_utc().date()),
         bin_size: BinSize::Daily,
         end_date: time::OffsetDateTime::now_utc().date() + time::Duration::days(1),
     };
