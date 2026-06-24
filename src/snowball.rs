@@ -79,11 +79,12 @@ pub async fn snowball_request(req_body: String, config: web::Data<AppConfig>) ->
         handle_request(&req_body, &config.lens_api_key, &config.cache_backend).await;
     let request_completed_ms = epoch_ms();
 
+    let pool = config.database_pool.clone();
+
     match snowball {
         Ok(snowball) => {
             log::info!("Request completed successfully");
 
-            let pool = config.database_pool.clone();
             let article_count = snowball.matches("\"doi\":").count();
             tracking::log_search_success(
                 article_count,
@@ -98,7 +99,6 @@ pub async fn snowball_request(req_body: String, config: web::Data<AppConfig>) ->
         Err(error) => {
             log::error!("Request failed: {error:?}");
 
-            let pool = config.database_pool.clone();
             let error_msg = error.to_string();
             tracking::log_search_error(
                 error_msg,
