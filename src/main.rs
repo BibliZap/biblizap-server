@@ -11,6 +11,7 @@ mod common;
 mod corpus;
 mod snowball;
 mod tracking;
+mod usage;
 
 use snowball::*;
 
@@ -215,6 +216,9 @@ async fn main() -> std::io::Result<()> {
             .service(
                 web::resource("/api/corpus/enrich/{hash_hex}")
                     .route(web::get().to(corpus::enrich_corpus)),
+            )
+            .service(
+                web::resource("api/usage_info/").route(web::post().to(usage::usage_info_request)),
             )
             // Catch all route to serve frontend static files, with fallback to index.html for SPA routing
             .default_service(ResourceFiles::new("/", generated).resolve_not_found_to_root())
