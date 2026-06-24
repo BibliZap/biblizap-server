@@ -1,75 +1,34 @@
 use std::collections::HashMap;
 
+use crate::AppConfig;
 use actix_web::{HttpResponse, Responder, web};
 
-use crate::AppConfig;
-
-#[derive(Debug, thiserror::Error)]
-enum Error {
-    #[error("Database error: {0}")]
-    DatabaseError(#[from] sqlx::Error),
-    #[error("JSON parsing error: {0}")]
-    JsonError(#[from] serde_json::Error),
-}
-
-#[derive(Debug, serde::Deserialize, Clone, Copy, PartialEq, Eq, Hash)]
-enum SamplingTime {
-    Day,
-    Week,
-    Month,
-    Year,
-    All,
-}
-
-impl SamplingTime {
-    fn to_duration(&self) -> std::time::Duration {
-        match self {
-            SamplingTime::Day => std::time::Duration::from_secs(60 * 60 * 24),
-            SamplingTime::Week => std::time::Duration::from_secs(60 * 60 * 24 * 7),
-            SamplingTime::Month => std::time::Duration::from_secs(60 * 60 * 24 * 30),
-            SamplingTime::Year => std::time::Duration::from_secs(60 * 60 * 24 * 365),
-            SamplingTime::All => std::time::Duration::from_secs(u64::MAX), // Special case for all time
-        }
-    }
-}
-
-async fn db_get_usage_info(
-    pool: &sqlx::PgPool,
-    sampling_time: SamplingTime,
-) -> Result<HashMap<i64, i64>, sqlx::Error> {
+pub async fn db_get_daily_usage(pool: &sqlx::PgPool) -> Result<HashMap<i32, i64>, sqlx::Error> {
     let rows = sqlx::query!(
         r#"
         SELECT 
-            FLOOR(((EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT - request_started_ms) / $1)::BIGINT AS "time_bucket!",
+            to_timestamp(request_started_ms / 1000)::date AS "date_bucket!",
             COUNT(*) as "total_requests!"
         FROM bbz_events
         WHERE event_type = 'search_success'
         GROUP BY 1
+        ORDER BY 1 DESC
         "#,
-        sampling_time.to_duration().as_millis() as i64
     )
     .fetch_all(pool)
     .await?;
 
-    let usage_map: HashMap<i64, i64> = rows
+    let usage_map: HashMap<i32, i64> = rows
         .into_iter()
-        .map(|row| (row.time_bucket, row.total_requests))
+        .map(|row| (row.date_bucket.to_julian_day(), row.total_requests))
         .collect();
 
     Ok(usage_map)
 }
 
-async fn handle_request(
-    req_body: &str,
-    config: web::Data<AppConfig>,
-) -> Result<HashMap<i64, i64>, Error> {
-    let sampling_time = serde_json::from_str::<SamplingTime>(req_body)?;
-    let usage_info = db_get_usage_info(&config.database_pool, sampling_time).await?;
-    Ok(usage_info)
-}
-
-pub async fn usage_info_request(req_body: String, config: web::Data<AppConfig>) -> impl Responder {
-    let usage_info: Result<HashMap<i64, i64>, Error> = handle_request(&req_body, config).await;
+pub async fn usage_info_request(config: web::Data<AppConfig>) -> impl Responder {
+    let usage_info: Result<HashMap<i32, i64>, sqlx::Error> =
+        db_get_daily_usage(&config.database_pool).await;
 
     match usage_info {
         Ok(usage_info) => {

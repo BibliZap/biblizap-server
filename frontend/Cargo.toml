@@ -37,3 +37,4 @@ chrono = "0.4.44"
 rust_xlsxwriter = { version = "0.95.0", features = ["wasm", "serde"] }
 url = "2.5.8"
 hex = "0.4.3"
+time = { version = "0.3", features = ["wasm-bindgen", "macros"] }
