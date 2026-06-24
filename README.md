@@ -147,6 +147,18 @@ Run the binary directly and supply the Lens API key (CLI flags override config f
 
 Defaults: bind_address=127.0.0.1, port=35642. The server will listen on the configured address and port; if you omit flags, values are taken from `./biblizap.toml`, `$XDG_CONFIG_HOME/biblizap/biblizap.toml`, or `/etc/biblizap/biblizap.toml` (precedence shown in `--help`).
 
+### Building the OpenAlex Database
+
+The OpenAlex database is built with a separate CLI so the web server stays focused on serving the app:
+
+```bash
+./target/release/biblizap-openalex import \
+  --dump-path /data/openalex/works/part_000.gz \
+  --database-url postgres://biblizap:password@localhost/biblizap
+```
+
+The importer reads `openalex_dump_path` from `biblizap.toml`. It writes to the app database from `DATABASE_URL`, unless `--database-url` is provided.
+
 To see the help text (includes config-file locations and precedence):
 
 ```bash
