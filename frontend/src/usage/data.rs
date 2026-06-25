@@ -1,9 +1,5 @@
 use std::collections::HashMap;
 
-use yew::prelude::*;
-
-use crate::results::{ErrorMessage, Spinner};
-
 #[derive(Clone, Copy, PartialEq, Debug, thiserror::Error)]
 pub enum BinSizeError {
     #[error("Invalid custom days: {0}")]
@@ -11,7 +7,7 @@ pub enum BinSizeError {
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
-enum BinSize {
+pub enum BinSize {
     Daily,
     Weekly,
     Monthly,
@@ -19,7 +15,7 @@ enum BinSize {
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
-struct CustomDays(i64);
+pub struct CustomDays(i64);
 
 impl TryFrom<i64> for CustomDays {
     type Error = BinSizeError;
@@ -62,14 +58,8 @@ impl BinSize {
     }
 }
 
-enum PageState {
-    Loading,
-    Loaded(UsageData),
-    Error(String),
-}
-
 #[derive(Clone, PartialEq, Debug)]
-struct UsageData {
+pub struct UsageData {
     pub data: HashMap<i32, i64>,
 }
 
@@ -80,7 +70,7 @@ impl From<HashMap<i32, i64>> for UsageData {
 }
 
 impl UsageData {
-    fn get_first_date(&self) -> Option<time::Date> {
+    pub fn get_first_date(&self) -> Option<time::Date> {
         self.data
             .keys()
             .min()
@@ -88,19 +78,19 @@ impl UsageData {
             .flatten()
     }
 
-    fn get_total_requests(&self) -> i64 {
+    pub fn get_total_requests(&self) -> i64 {
         self.data.values().sum()
     }
 
-    fn get_requests_for_julian_date(&self, julian_date: i32) -> i64 {
+    pub fn get_requests_for_julian_date(&self, julian_date: i32) -> i64 {
         self.data.get(&julian_date).copied().unwrap_or(0)
     }
 
-    fn get_requests_for_date(&self, date: time::Date) -> i64 {
+    pub fn get_requests_for_date(&self, date: time::Date) -> i64 {
         self.get_requests_for_julian_date(date.to_julian_day())
     }
 
-    fn get_total_requests_for_date_until(
+    pub fn get_total_requests_for_date_until(
         &self,
         start_date: time::Date,
         end_date: time::Date,
@@ -115,11 +105,27 @@ impl UsageData {
     }
 }
 
-struct UsageBinIterator<'a> {
+pub struct UsageBinIterator<'a> {
     usage_data: &'a UsageData,
     current_start_date: time::Date,
     bin_size: BinSize,
     end_date: time::Date,
+}
+
+impl UsageBinIterator<'_> {
+    pub fn new(
+        usage_data: &UsageData,
+        start_date: time::Date,
+        bin_size: BinSize,
+        end_date: time::Date,
+    ) -> UsageBinIterator {
+        UsageBinIterator {
+            usage_data,
+            current_start_date: start_date,
+            bin_size,
+            end_date,
+        }
+    }
 }
 
 impl<'a> Iterator for UsageBinIterator<'a> {
@@ -146,74 +152,11 @@ impl<'a> Iterator for UsageBinIterator<'a> {
     }
 }
 
-async fn fetch_usage_data() -> Result<UsageData, Box<dyn std::error::Error>> {
+pub async fn fetch_usage_data() -> Result<UsageData, Box<dyn std::error::Error>> {
     let response = gloo_net::http::Request::post("/api/usage_info/")
         .header("Content-Type", "text/plain")
         .send()
         .await?;
     let data: HashMap<i32, i64> = serde_json::from_str(&response.text().await?)?;
     Ok(data.into())
-}
-
-#[function_component]
-pub fn UsageResultsPage() -> Html {
-    let page_state: UseStateHandle<PageState> = use_state(|| PageState::Loading);
-
-    {
-        let page_state = page_state.clone();
-        use_effect_with((), move |_| {
-            yew::platform::spawn_local(async move {
-                // Fetch usage data from the backend
-                let result = fetch_usage_data().await;
-                match result {
-                    Ok(data) => page_state.set(PageState::Loaded(data)),
-                    Err(err) => page_state.set(PageState::Error(err.to_string())),
-                }
-            });
-        });
-    }
-
-    let content = match &*page_state {
-        PageState::Loading => html! { <Spinner /> },
-        PageState::Error(msg) => html! { <ErrorMessage msg={msg.clone()} /> },
-        PageState::Loaded(usage_data) => {
-            html! { <UsageContainer data={usage_data.clone()} /> }
-        }
-    };
-
-    html! {
-        <div>
-            {content}
-        </div>
-    }
-}
-
-#[derive(Properties, PartialEq, Clone)]
-struct UsageProps {
-    pub data: UsageData,
-}
-
-#[function_component]
-fn UsageContainer(UsageProps { data }: &UsageProps) -> Html {
-    let iterator = UsageBinIterator {
-        usage_data: data,
-        current_start_date: data
-            .get_first_date()
-            .unwrap_or(time::OffsetDateTime::now_utc().date()),
-        bin_size: BinSize::Daily,
-        end_date: time::OffsetDateTime::now_utc().date() + time::Duration::days(1),
-    };
-
-    html! {
-        <div>
-            <h2>{ "Usage Data" }</h2>
-            <ul>
-                { for iterator.map(|(start_date, end_date, total_requests)| {
-                    html! {
-                        <li>{ format!("Time Bucket: {} to {}, Total Requests: {}", start_date, end_date, total_requests) }</li>
-                    }
-                }) }
-            </ul>
-        </div>
-    }
 }
