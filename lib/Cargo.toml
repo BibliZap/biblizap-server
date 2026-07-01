@@ -12,15 +12,15 @@ cache-sqlite = ["sqlx", "sqlx/sqlite"]
 cache-postgres = ["sqlx", "sqlx/postgres"]
 
 [dependencies]
-anyhow = "1.0.102"
-arrayvec = { version = "0.7.6", features = ["serde"] }
+anyhow = "1.0.103"
+arrayvec = { version = "0.7.7", features = ["serde"] }
 async-std = "1.13.2"
 futures = "0.3.32"
 lazy_static = "1.5.0"
-log = "0.4.29"
+log = "0.4.33"
 nohash-hasher = "0.2.0"
-regex = "1.12.3"
-reqwest = { version = "0.13.3", features = ["blocking"] }
+regex = "1.12.4"
+reqwest = { version = "0.13.4", features = ["blocking"] }
 serde = { version = "1.0.228", features = ["serde_derive"] }
 serde_json = "1.0.150"
 thiserror = "2.0.18"
