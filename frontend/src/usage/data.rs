@@ -105,11 +105,19 @@ impl UsageData {
     }
 }
 
+#[derive(Clone, PartialEq, Debug)]
 pub struct UsageBinIterator<'a> {
     usage_data: &'a UsageData,
     current_start_date: time::Date,
     bin_size: BinSize,
     end_date: time::Date,
+}
+
+#[derive(Clone, PartialEq, Debug)]
+pub struct UsageDataPoint {
+    pub start_date: time::Date,
+    pub end_date: time::Date,
+    pub count: i64,
 }
 
 impl UsageBinIterator<'_> {
@@ -129,7 +137,7 @@ impl UsageBinIterator<'_> {
 }
 
 impl<'a> Iterator for UsageBinIterator<'a> {
-    type Item = (time::Date, time::Date, i64);
+    type Item = UsageDataPoint;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.current_start_date >= self.end_date {
@@ -148,7 +156,11 @@ impl<'a> Iterator for UsageBinIterator<'a> {
 
         self.current_start_date = effective_end;
 
-        Some((current_bin_start, effective_end, total_requests))
+        Some(UsageDataPoint {
+            start_date: current_bin_start,
+            end_date: effective_end,
+            count: total_requests,
+        })
     }
 }
 

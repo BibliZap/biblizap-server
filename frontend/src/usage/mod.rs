@@ -3,6 +3,9 @@ use yew::prelude::*;
 mod data;
 use data::*;
 
+mod chart;
+use chart::*;
+
 use crate::results::{ErrorMessage, Spinner};
 
 enum PageState {
@@ -33,42 +36,13 @@ pub fn UsageResultsPage() -> Html {
         PageState::Loading => html! { <Spinner /> },
         PageState::Error(msg) => html! { <ErrorMessage msg={msg.clone()} /> },
         PageState::Loaded(usage_data) => {
-            html! { <UsageContainer data={usage_data.clone()} /> }
+            html! { <UsageChart data={usage_data.clone()} /> }
         }
     };
 
     html! {
         <div>
             {content}
-        </div>
-    }
-}
-
-#[derive(Properties, PartialEq, Clone)]
-struct UsageProps {
-    pub data: UsageData,
-}
-
-#[function_component]
-fn UsageContainer(UsageProps { data }: &UsageProps) -> Html {
-    let iterator = UsageBinIterator::new(
-        &data,
-        data.get_first_date()
-            .unwrap_or(time::OffsetDateTime::now_utc().date()),
-        BinSize::Daily,
-        time::OffsetDateTime::now_utc().date() + time::Duration::days(1),
-    );
-
-    html! {
-        <div>
-            <h2>{ "Usage Data" }</h2>
-            <ul>
-                { for iterator.map(|(start_date, end_date, total_requests)| {
-                    html! {
-                        <li>{ format!("Time Bucket: {} to {}, Total Requests: {}", start_date, end_date, total_requests) }</li>
-                    }
-                }) }
-            </ul>
         </div>
     }
 }

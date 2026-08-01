@@ -222,3 +222,14 @@ table tbody td {
     pointer-events: none;
     cursor: default;
 }
+
+.usage-chart-container {
+    width: 100%;
+    height: 16rem;
+
+    canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+    }
+}
