@@ -173,7 +173,7 @@ http://127.0.0.1:35642
 
 ## API Documentation
 
-The server exposes a single POST endpoint at `/api`.
+The main search API is exposed as a POST endpoint at `/api`.
 It expects a JSON body with the following structure:
 
 ```json
@@ -186,6 +186,59 @@ It expects a JSON body with the following structure:
 ```
 
 The response is a JSON array of article objects.
+
+### Health check
+
+`GET /health` checks that the web server can query both the tracking and Lens cache
+PostgreSQL databases. It returns:
+
+- HTTP `200` with `{"status":"ok"}` when both databases respond.
+- HTTP `503` with `{"status":"unavailable"}` when either database fails or the
+  checks take longer than three seconds.
+
+The response deliberately excludes internal error details. Check the server logs
+for the failed database and error.
+
+## External health monitor
+
+The `biblizap-monitor` binary is intended to run on a different server. By default,
+it requests the public health URL every 30 seconds with a 10-second timeout. It
+sends an SMTP outage email after two consecutive failures and a recovery email
+after the endpoint becomes healthy again. Failed email deliveries are retried on
+the next check; repeated health failures do not produce repeated emails once an
+outage alert has been delivered.
+
+Build it with:
+
+```bash
+cargo build --release --bin biblizap-monitor
+```
+
+On the monitoring server, install the binary as
+`/usr/local/bin/biblizap-monitor`, copy `biblizap-monitor.env.example` to
+`/etc/biblizap-monitor/.env`, and replace all example values. The `.env` file
+contains the SMTP password and should only be readable by the monitor user:
+
+```bash
+sudo useradd --system --no-create-home --shell /usr/sbin/nologin biblizap-monitor
+sudo install -d -m 0700 -o biblizap-monitor -g biblizap-monitor /etc/biblizap-monitor
+sudo install -m 0600 -o biblizap-monitor -g biblizap-monitor \
+  biblizap-monitor.env.example /etc/biblizap-monitor/.env
+sudo install -m 0644 deploy/biblizap-monitor.service \
+  /etc/systemd/system/biblizap-monitor.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now biblizap-monitor.service
+```
+
+The default SMTP mode is required STARTTLS, normally used on port 587. Set
+`SMTP_TLS_MODE=implicit` for implicit TLS, normally on port 465. Multiple alert
+recipients can be listed in `ALERT_TO`, separated by commas.
+
+Monitor logs are available with:
+
+```bash
+journalctl -u biblizap-monitor.service -f
+```
 
 ## Contributing
 

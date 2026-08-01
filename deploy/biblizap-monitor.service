@@ -1,0 +1,20 @@
+[Unit]
+Description=BibliZap external health monitor
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=biblizap-monitor
+Group=biblizap-monitor
+WorkingDirectory=/etc/biblizap-monitor
+ExecStart=/usr/local/bin/biblizap-monitor
+Restart=on-failure
+RestartSec=5s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+
+[Install]
+WantedBy=multi-user.target

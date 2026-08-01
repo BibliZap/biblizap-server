@@ -9,6 +9,7 @@ use thiserror::Error;
 
 mod common;
 mod corpus;
+mod health;
 mod snowball;
 mod tracking;
 mod usage;
@@ -22,6 +23,7 @@ include!(concat!(env!("OUT_DIR"), "/generated.rs"));
 struct AppConfig {
     lens_api_key: String,
     cache_backend: PostgresBackend,
+    cache_database_pool: sqlx::PgPool,
     database_pool: sqlx::PgPool,
 }
 
@@ -163,6 +165,7 @@ async fn main() -> std::io::Result<()> {
     );
 
     // Create PostgresBackend from pre-configured pool (runs migrations automatically)
+    let cache_database_pool = cache_pool.clone();
     let cache_backend = biblizap_rs::lens::cache::postgres::PostgresBackend::from_pool(cache_pool)
         .await
         .unwrap_or_else(|e| {
@@ -190,6 +193,7 @@ async fn main() -> std::io::Result<()> {
     let config = web::Data::new(AppConfig {
         lens_api_key,
         cache_backend,
+        cache_database_pool,
         database_pool,
     });
 
@@ -205,6 +209,7 @@ async fn main() -> std::io::Result<()> {
 
         App::new()
             .app_data(config.clone())
+            .service(web::resource("/health").route(web::get().to(health::health)))
             .service(web::resource("/api").route(web::post().to(snowball_request)))
             .service(
                 web::resource("/api/corpus/download/{hash_hex}")

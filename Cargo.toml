@@ -25,8 +25,9 @@ dotenvy = "0.15.7"
 env_logger = "0.11.11"
 hex = "0.4.3"
 log = "0.4.33"
+lettre = "0.11.19"
 num_cpus = "1.17"
-reqwest = "0.13.4"
+reqwest = { version = "0.13.4", features = ["json"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.150"
 sha2 = "0.11.0"
@@ -39,6 +40,7 @@ sqlx = { version = "0.9", features = [
 ] }
 static-files = "0.3.1"
 thiserror = "2.0.18"
+time = "=0.3.51"
 tokio = "1.52.3"
 urlencoding = "2.1"
 uuid = { version = "1.23", features = ["v4", "serde"] }
@@ -49,8 +51,6 @@ zstd = "0.13.3"
 [build-dependencies]
 static-files = "0.3.1"
 change-detection = "1.2"
-
-[profile.release]
 # Backend: optimize for speed (default opt-level = 3)
 
 [profile.wasm-release]
