@@ -7,8 +7,8 @@ After=network-online.target
 Type=simple
 User=biblizap-monitor
 Group=biblizap-monitor
-WorkingDirectory=/etc/biblizap-monitor
-ExecStart=/usr/local/bin/biblizap-monitor
+Environment=RUST_LOG=info
+ExecStart=/usr/local/bin/biblizap-monitor --config /etc/biblizap-monitor/biblizap-monitor.toml
 Restart=on-failure
 RestartSec=5s
 NoNewPrivileges=true

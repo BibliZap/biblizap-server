@@ -1,11 +1,23 @@
-use std::{env, error::Error, time::Duration};
+use std::{error::Error, path::PathBuf, time::Duration};
 
+use clap::Parser;
+use config as conf;
 use lettre::{
     Message, SmtpTransport, Transport, message::Mailbox,
     transport::smtp::authentication::Credentials,
 };
 use reqwest::{Client, StatusCode, Url};
 use serde::Deserialize;
+
+const DEFAULT_CONFIG_PATH: &str = "/etc/biblizap-monitor/biblizap-monitor.toml";
+
+#[derive(Parser)]
+#[command(version, about = "Monitor BibliZap and send SMTP outage alerts")]
+struct Args {
+    /// Path to the monitor TOML configuration file
+    #[arg(long, default_value = DEFAULT_CONFIG_PATH)]
+    config: PathBuf,
+}
 
 #[derive(Clone)]
 struct Config {
@@ -26,6 +38,43 @@ struct SmtpConfig {
     timeout: Duration,
     from: Mailbox,
     recipients: Vec<Mailbox>,
+}
+
+#[derive(Deserialize)]
+struct FileConfig {
+    health: HealthFileConfig,
+    smtp: SmtpFileConfig,
+    alerts: AlertsFileConfig,
+}
+
+#[derive(Deserialize)]
+struct HealthFileConfig {
+    url: String,
+    #[serde(default = "default_check_interval_seconds")]
+    interval_seconds: u64,
+    #[serde(default = "default_request_timeout_seconds")]
+    timeout_seconds: u64,
+    #[serde(default = "default_failure_threshold")]
+    failure_threshold: u32,
+}
+
+#[derive(Deserialize)]
+struct SmtpFileConfig {
+    host: String,
+    #[serde(default = "default_smtp_port")]
+    port: u16,
+    username: String,
+    password: String,
+    #[serde(default = "default_tls_mode")]
+    tls_mode: String,
+    #[serde(default = "default_smtp_timeout_seconds")]
+    timeout_seconds: u64,
+}
+
+#[derive(Deserialize)]
+struct AlertsFileConfig {
+    from: String,
+    to: Vec<String>,
 }
 
 #[derive(Clone, Copy)]
@@ -70,36 +119,49 @@ impl MonitorState {
 }
 
 impl Config {
-    fn from_env() -> Result<Self, Box<dyn Error>> {
-        let healthcheck_url = required_env("HEALTHCHECK_URL")?.parse()?;
-        let check_interval = duration_env("CHECK_INTERVAL_SECONDS", 30)?;
-        let request_timeout = duration_env("REQUEST_TIMEOUT_SECONDS", 10)?;
-        let failure_threshold = parse_env("FAILURE_THRESHOLD", 2)?;
+    fn load(path: PathBuf) -> Result<Self, Box<dyn Error>> {
+        let file_config: FileConfig = conf::Config::builder()
+            .add_source(conf::File::from(path))
+            .add_source(
+                conf::Environment::with_prefix("BIBLIZAP_MONITOR")
+                    .prefix_separator("_")
+                    .separator("__")
+                    .try_parsing(true),
+            )
+            .build()?
+            .try_deserialize()?;
+
+        Self::try_from(file_config)
+    }
+
+    fn try_from(file: FileConfig) -> Result<Self, Box<dyn Error>> {
+        let healthcheck_url = file.health.url.parse()?;
+        let check_interval =
+            checked_duration("health.interval_seconds", file.health.interval_seconds)?;
+        let request_timeout =
+            checked_duration("health.timeout_seconds", file.health.timeout_seconds)?;
+        let failure_threshold = file.health.failure_threshold;
         if failure_threshold == 0 {
-            return Err("FAILURE_THRESHOLD must be at least 1".into());
+            return Err("health.failure_threshold must be at least 1".into());
         }
 
-        let recipients = required_env("ALERT_TO")?
-            .split(',')
-            .map(str::trim)
-            .filter(|address| !address.is_empty())
-            .map(str::parse)
+        let recipients = file
+            .alerts
+            .to
+            .into_iter()
+            .map(|address| address.parse())
             .collect::<Result<Vec<Mailbox>, _>>()?;
         if recipients.is_empty() {
-            return Err("ALERT_TO must contain at least one email address".into());
+            return Err("alerts.to must contain at least one email address".into());
         }
 
-        let tls_mode = match env::var("SMTP_TLS_MODE")
-            .unwrap_or_else(|_| "starttls".to_owned())
-            .to_ascii_lowercase()
-            .as_str()
-        {
+        let tls_mode = match file.smtp.tls_mode.to_ascii_lowercase().as_str() {
             "starttls" => TlsMode::StartTls,
             "implicit" => TlsMode::Implicit,
             "none" => TlsMode::None,
             value => {
                 return Err(format!(
-                    "invalid SMTP_TLS_MODE '{value}'; use starttls, implicit, or none"
+                    "invalid smtp.tls_mode '{value}'; use starttls, implicit, or none"
                 )
                 .into());
             }
@@ -111,37 +173,44 @@ impl Config {
             request_timeout,
             failure_threshold,
             smtp: SmtpConfig {
-                host: required_env("SMTP_HOST")?,
-                port: parse_env("SMTP_PORT", 587)?,
-                username: required_env("SMTP_USERNAME")?,
-                password: required_env("SMTP_PASSWORD")?,
+                host: file.smtp.host,
+                port: file.smtp.port,
+                username: file.smtp.username,
+                password: file.smtp.password,
                 tls_mode,
-                timeout: duration_env("SMTP_TIMEOUT_SECONDS", 10)?,
-                from: required_env("ALERT_FROM")?.parse()?,
+                timeout: checked_duration("smtp.timeout_seconds", file.smtp.timeout_seconds)?,
+                from: file.alerts.from.parse()?,
                 recipients,
             },
         })
     }
 }
 
-fn required_env(name: &str) -> Result<String, Box<dyn Error>> {
-    env::var(name).map_err(|_| format!("required environment variable {name} is not set").into())
+const fn default_check_interval_seconds() -> u64 {
+    30
 }
 
-fn parse_env<T>(name: &str, default: T) -> Result<T, Box<dyn Error>>
-where
-    T: std::str::FromStr,
-    T::Err: Error + 'static,
-{
-    match env::var(name) {
-        Ok(value) => Ok(value.parse()?),
-        Err(env::VarError::NotPresent) => Ok(default),
-        Err(error) => Err(error.into()),
-    }
+const fn default_request_timeout_seconds() -> u64 {
+    10
 }
 
-fn duration_env(name: &str, default_seconds: u64) -> Result<Duration, Box<dyn Error>> {
-    let seconds = parse_env(name, default_seconds)?;
+const fn default_failure_threshold() -> u32 {
+    2
+}
+
+const fn default_smtp_port() -> u16 {
+    587
+}
+
+fn default_tls_mode() -> String {
+    "starttls".to_owned()
+}
+
+const fn default_smtp_timeout_seconds() -> u64 {
+    10
+}
+
+fn checked_duration(name: &str, seconds: u64) -> Result<Duration, Box<dyn Error>> {
     if seconds == 0 {
         return Err(format!("{name} must be at least 1").into());
     }
@@ -232,10 +301,10 @@ fn send_notification_blocking(
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    dotenvy::dotenv().ok();
+    let args = Args::parse();
     env_logger::init();
 
-    let config = Config::from_env()?;
+    let config = Config::load(args.config)?;
     let client = Client::builder().timeout(config.request_timeout).build()?;
     let mut state = MonitorState::default();
     let mut interval = tokio::time::interval(config.check_interval);
@@ -295,5 +364,36 @@ mod tests {
 
         assert_eq!(state.observe(false, 1), Some(Notification::Outage));
         assert_eq!(state.observe(false, 1), Some(Notification::Outage));
+    }
+
+    #[test]
+    fn parses_structured_configuration() {
+        let file: FileConfig = conf::Config::builder()
+            .add_source(conf::File::from_str(
+                r#"
+                [health]
+                url = "https://example.com/health"
+
+                [smtp]
+                host = "smtp.example.com"
+                username = "monitor"
+                password = "secret"
+
+                [alerts]
+                from = "monitor@example.com"
+                to = ["owner@example.com"]
+                "#,
+                conf::FileFormat::Toml,
+            ))
+            .build()
+            .unwrap()
+            .try_deserialize()
+            .unwrap();
+
+        let config = Config::try_from(file).unwrap();
+        assert_eq!(config.check_interval, Duration::from_secs(30));
+        assert_eq!(config.request_timeout, Duration::from_secs(10));
+        assert_eq!(config.failure_threshold, 2);
+        assert_eq!(config.smtp.port, 587);
     }
 }

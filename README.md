@@ -215,15 +215,16 @@ cargo build --release --bin biblizap-monitor
 ```
 
 On the monitoring server, install the binary as
-`/usr/local/bin/biblizap-monitor`, copy `biblizap-monitor.env.example` to
-`/etc/biblizap-monitor/.env`, and replace all example values. The `.env` file
-contains the SMTP password and should only be readable by the monitor user:
+`/usr/local/bin/biblizap-monitor`, copy `biblizap-monitor.example.toml` to
+`/etc/biblizap-monitor/biblizap-monitor.toml`, and replace all example values.
+The configuration file contains the SMTP password and should only be readable by
+the monitor user:
 
 ```bash
 sudo useradd --system --no-create-home --shell /usr/sbin/nologin biblizap-monitor
 sudo install -d -m 0700 -o biblizap-monitor -g biblizap-monitor /etc/biblizap-monitor
 sudo install -m 0600 -o biblizap-monitor -g biblizap-monitor \
-  biblizap-monitor.env.example /etc/biblizap-monitor/.env
+  biblizap-monitor.example.toml /etc/biblizap-monitor/biblizap-monitor.toml
 sudo install -m 0644 deploy/biblizap-monitor.service \
   /etc/systemd/system/biblizap-monitor.service
 sudo systemctl daemon-reload
@@ -231,8 +232,13 @@ sudo systemctl enable --now biblizap-monitor.service
 ```
 
 The default SMTP mode is required STARTTLS, normally used on port 587. Set
-`SMTP_TLS_MODE=implicit` for implicit TLS, normally on port 465. Multiple alert
-recipients can be listed in `ALERT_TO`, separated by commas.
+`smtp.tls_mode = "implicit"` for implicit TLS, normally on port 465. Multiple alert
+recipients can be listed in the `alerts.to` TOML array.
+
+The monitor accepts `--config PATH`; its default is
+`/etc/biblizap-monitor/biblizap-monitor.toml`. Configuration values can be
+overridden with `BIBLIZAP_MONITOR_` environment variables using `__` for nested
+keys—for example, `BIBLIZAP_MONITOR_SMTP__PASSWORD`.
 
 Monitor logs are available with:
 
