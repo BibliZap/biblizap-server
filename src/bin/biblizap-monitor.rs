@@ -1,4 +1,9 @@
-use std::{error::Error, path::PathBuf, time::Duration};
+use std::{
+    error::Error,
+    fs, io,
+    path::{Path, PathBuf},
+    time::Duration,
+};
 
 use clap::Parser;
 use config as conf;
@@ -25,6 +30,7 @@ struct Config {
     check_interval: Duration,
     request_timeout: Duration,
     failure_threshold: u32,
+    state_file: PathBuf,
     smtp: SmtpConfig,
 }
 
@@ -43,8 +49,14 @@ struct SmtpConfig {
 #[derive(Deserialize)]
 struct FileConfig {
     health: HealthFileConfig,
+    state: StateFileConfig,
     smtp: SmtpFileConfig,
     alerts: AlertsFileConfig,
+}
+
+#[derive(Deserialize)]
+struct StateFileConfig {
+    file: PathBuf,
 }
 
 #[derive(Deserialize)]
@@ -81,7 +93,6 @@ struct AlertsFileConfig {
 enum TlsMode {
     StartTls,
     Implicit,
-    None,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -93,7 +104,14 @@ enum Notification {
 #[derive(Default)]
 struct MonitorState {
     consecutive_failures: u32,
-    outage_alerted: bool,
+    last_known: Option<ServiceState>,
+    state_dirty: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ServiceState {
+    Up,
+    Down,
 }
 
 #[derive(Deserialize)]
@@ -102,19 +120,70 @@ struct HealthResponse {
 }
 
 impl MonitorState {
+    fn load(path: &Path) -> Result<Self, Box<dyn Error>> {
+        let last_known = match fs::read_to_string(path) {
+            Ok(value) => match value.trim() {
+                "up" => Some(ServiceState::Up),
+                "down" => Some(ServiceState::Down),
+                value => return Err(format!("invalid monitor state '{value}'").into()),
+            },
+            Err(error) if error.kind() == io::ErrorKind::NotFound => None,
+            Err(error) => return Err(error.into()),
+        };
+
+        Ok(Self {
+            consecutive_failures: 0,
+            last_known,
+            state_dirty: false,
+        })
+    }
+
+    fn save(&mut self, path: &Path) -> Result<(), Box<dyn Error>> {
+        if !self.state_dirty {
+            return Ok(());
+        }
+        let Some(last_known) = self.last_known else {
+            return Ok(());
+        };
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        let temporary_path = path.with_extension("tmp");
+        let value = match last_known {
+            ServiceState::Up => "up\n",
+            ServiceState::Down => "down\n",
+        };
+        fs::write(&temporary_path, value)?;
+        fs::rename(temporary_path, path)?;
+        self.state_dirty = false;
+        Ok(())
+    }
+
     fn observe(&mut self, healthy: bool, threshold: u32) -> Option<Notification> {
         if healthy {
             self.consecutive_failures = 0;
-            return self.outage_alerted.then_some(Notification::Recovery);
+            return (self.last_known == Some(ServiceState::Down)).then_some(Notification::Recovery);
         }
 
         self.consecutive_failures = self.consecutive_failures.saturating_add(1);
-        (self.consecutive_failures >= threshold && !self.outage_alerted)
+        (self.consecutive_failures >= threshold && self.last_known != Some(ServiceState::Down))
             .then_some(Notification::Outage)
     }
 
     fn notification_sent(&mut self, notification: Notification) {
-        self.outage_alerted = notification == Notification::Outage;
+        self.last_known = Some(match notification {
+            Notification::Outage => ServiceState::Down,
+            Notification::Recovery => ServiceState::Up,
+        });
+        self.state_dirty = true;
+    }
+
+    fn record_initial_healthy_state(&mut self) {
+        if self.last_known.is_none() {
+            self.last_known = Some(ServiceState::Up);
+            self.state_dirty = true;
+        }
     }
 }
 
@@ -135,7 +204,10 @@ impl Config {
     }
 
     fn try_from(file: FileConfig) -> Result<Self, Box<dyn Error>> {
-        let healthcheck_url = file.health.url.parse()?;
+        let healthcheck_url: Url = file.health.url.parse()?;
+        if healthcheck_url.scheme() != "https" {
+            return Err("health.url must use HTTPS".into());
+        }
         let check_interval =
             checked_duration("health.interval_seconds", file.health.interval_seconds)?;
         let request_timeout =
@@ -158,12 +230,10 @@ impl Config {
         let tls_mode = match file.smtp.tls_mode.to_ascii_lowercase().as_str() {
             "starttls" => TlsMode::StartTls,
             "implicit" => TlsMode::Implicit,
-            "none" => TlsMode::None,
             value => {
-                return Err(format!(
-                    "invalid smtp.tls_mode '{value}'; use starttls, implicit, or none"
-                )
-                .into());
+                return Err(
+                    format!("invalid smtp.tls_mode '{value}'; use starttls or implicit").into(),
+                );
             }
         };
 
@@ -172,6 +242,7 @@ impl Config {
             check_interval,
             request_timeout,
             failure_threshold,
+            state_file: file.state.file,
             smtp: SmtpConfig {
                 host: file.smtp.host,
                 port: file.smtp.port,
@@ -285,7 +356,6 @@ fn send_notification_blocking(
     let builder = match smtp.tls_mode {
         TlsMode::StartTls => SmtpTransport::starttls_relay(&smtp.host),
         TlsMode::Implicit => SmtpTransport::relay(&smtp.host),
-        TlsMode::None => Ok(SmtpTransport::builder_dangerous(&smtp.host)),
     };
     let credentials = Credentials::new(smtp.username.clone(), smtp.password.clone());
     let mailer = builder
@@ -306,7 +376,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let config = Config::load(args.config)?;
     let client = Client::builder().timeout(config.request_timeout).build()?;
-    let mut state = MonitorState::default();
+    let mut state = MonitorState::load(&config.state_file)?;
     let mut interval = tokio::time::interval(config.check_interval);
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
@@ -337,6 +407,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     log::error!("Unable to send {notification:?} notification: {error}");
                 }
             }
+        } else if healthy {
+            state.record_initial_healthy_state();
+        }
+
+        if let Err(error) = state.save(&config.state_file) {
+            // Keep the state dirty so persistence is retried after the next check.
+            log::error!("Unable to persist monitor state: {error}");
         }
     }
 }
@@ -344,6 +421,32 @@ async fn main() -> Result<(), Box<dyn Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn valid_file_config() -> FileConfig {
+        FileConfig {
+            health: HealthFileConfig {
+                url: "https://example.com/health".to_owned(),
+                interval_seconds: 30,
+                timeout_seconds: 10,
+                failure_threshold: 2,
+            },
+            state: StateFileConfig {
+                file: "/tmp/biblizap-monitor-test-state".into(),
+            },
+            smtp: SmtpFileConfig {
+                host: "smtp.example.com".to_owned(),
+                port: 587,
+                username: "monitor".to_owned(),
+                password: "secret".to_owned(),
+                tls_mode: "starttls".to_owned(),
+                timeout_seconds: 10,
+            },
+            alerts: AlertsFileConfig {
+                from: "monitor@example.com".to_owned(),
+                to: vec!["owner@example.com".to_owned()],
+            },
+        }
+    }
 
     #[test]
     fn alerts_after_threshold_and_then_on_recovery() {
@@ -374,6 +477,9 @@ mod tests {
                 [health]
                 url = "https://example.com/health"
 
+                [state]
+                file = "/tmp/biblizap-monitor-test-state"
+
                 [smtp]
                 host = "smtp.example.com"
                 username = "monitor"
@@ -395,5 +501,36 @@ mod tests {
         assert_eq!(config.request_timeout, Duration::from_secs(10));
         assert_eq!(config.failure_threshold, 2);
         assert_eq!(config.smtp.port, 587);
+    }
+
+    #[test]
+    fn known_outage_is_not_alerted_again_after_reload() {
+        let state_file =
+            std::env::temp_dir().join(format!("biblizap-monitor-state-{}", std::process::id()));
+        let mut state = MonitorState::default();
+        state.notification_sent(Notification::Outage);
+        state.save(&state_file).unwrap();
+
+        let mut reloaded = MonitorState::load(&state_file).unwrap();
+        assert_eq!(reloaded.observe(false, 1), None);
+        assert_eq!(reloaded.observe(true, 1), Some(Notification::Recovery));
+
+        fs::remove_file(state_file).unwrap();
+    }
+
+    #[test]
+    fn rejects_plaintext_smtp() {
+        let mut file = valid_file_config();
+        file.smtp.tls_mode = "none".to_owned();
+
+        assert!(Config::try_from(file).is_err());
+    }
+
+    #[test]
+    fn rejects_insecure_health_url() {
+        let mut file = valid_file_config();
+        file.health.url = "http://example.com/health".to_owned();
+
+        assert!(Config::try_from(file).is_err());
     }
 }

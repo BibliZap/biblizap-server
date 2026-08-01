@@ -233,7 +233,13 @@ sudo systemctl enable --now biblizap-monitor.service
 
 The default SMTP mode is required STARTTLS, normally used on port 587. Set
 `smtp.tls_mode = "implicit"` for implicit TLS, normally on port 465. Multiple alert
-recipients can be listed in the `alerts.to` TOML array.
+recipients can be listed in the `alerts.to` TOML array. Plaintext SMTP is not
+supported.
+
+The last successfully announced service state is stored in
+`/var/lib/biblizap-monitor/state`. While the service remains down, no additional
+outage emails are sent—even if the monitor restarts. A successful check after an
+announced outage sends one recovery email and records the service as up again.
 
 The monitor accepts `--config PATH`; its default is
 `/etc/biblizap-monitor/biblizap-monitor.toml`. Configuration values can be

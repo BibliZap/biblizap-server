@@ -9,6 +9,7 @@ User=biblizap-monitor
 Group=biblizap-monitor
 Environment=RUST_LOG=info
 ExecStart=/usr/local/bin/biblizap-monitor --config /etc/biblizap-monitor/biblizap-monitor.toml
+StateDirectory=biblizap-monitor
 Restart=on-failure
 RestartSec=5s
 NoNewPrivileges=true

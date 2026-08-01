@@ -1,18 +1,21 @@
 [health]
-url = "https://example.com/health"
+url = "https://biblizap.org/health"
 interval_seconds = 30
 timeout_seconds = 10
 failure_threshold = 2
 
+[state]
+file = "/var/lib/biblizap-monitor/state"
+
 [smtp]
-host = "smtp.example.com"
+host = "pro3.mail.ovh.net"
 port = 587
-username = "replace-me"
-password = "replace-me"
-# starttls (usually port 587), implicit (usually port 465), or none
+username = ""
+password = ""
+# starttls (usually port 587) or implicit (usually port 465)
 tls_mode = "starttls"
 timeout_seconds = 10
 
 [alerts]
-from = "monitor@example.com"
-to = ["you@example.com"]
+from = ""
+to = [""]
