@@ -1,15 +1,14 @@
 [Unit]
-Description=BibliZap external health monitor
+Description=BibliZap server
 Wants=network-online.target
 After=network-online.target
 
 [Service]
 Type=simple
-User=biblizap-monitor
-Group=biblizap-monitor
+User=biblizap
+Group=biblizap
 Environment=RUST_LOG=info
-ExecStart=/usr/bin/biblizap-monitor --config /etc/biblizap-monitor/biblizap-monitor.toml
-StateDirectory=biblizap-monitor
+ExecStart=/usr/bin/biblizap-server --config /etc/biblizap/biblizap.toml
 Restart=on-failure
 RestartSec=5s
 NoNewPrivileges=true

@@ -32,6 +32,7 @@ struct AppConfig {
 struct FileConfig {
     lens_api_key: Option<String>,
     cache_backend_url: Option<String>,
+    database_url: Option<String>,
     openalex_dump_path: Option<PathBuf>,
     bind_address: Option<String>,
     port: Option<u16>,
@@ -60,7 +61,6 @@ pub enum Error {
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let args = Args::parse();
-    dotenvy::dotenv().ok(); // Load .env file if present
 
     // Initialize logging: prefer RUST_LOG if set, otherwise use the CLI-provided log level.
     let mut logger_builder = env_logger::Builder::from_env(env_logger::Env::default());
@@ -77,21 +77,35 @@ async fn main() -> std::io::Result<()> {
         format!("{}/.config", home)
     });
 
-    let builder = conf::Config::builder()
-        .add_source(conf::File::with_name("/etc/biblizap/biblizap.toml").required(false))
+    let builder = conf::Config::builder();
+    let builder = if let Some(config_path) = &args.config {
+        builder.add_source(conf::File::from(config_path.clone()))
+    } else {
+        builder
+            .add_source(conf::File::with_name("/etc/biblizap/biblizap.toml").required(false))
+            .add_source(
+                conf::File::with_name(&format!("{}/biblizap/biblizap.toml", user_config_dir))
+                    .required(false),
+            )
+            .add_source(conf::File::with_name("biblizap.toml").required(false))
+    };
+    let settings = builder
         .add_source(
-            conf::File::with_name(&format!("{}/biblizap/biblizap.toml", user_config_dir))
-                .required(false),
+            conf::Environment::with_prefix("BIBLIZAP")
+                .prefix_separator("_")
+                .separator("__")
+                .try_parsing(true),
         )
-        .add_source(conf::File::with_name("biblizap.toml").required(false))
-        .add_source(conf::Environment::with_prefix("BIBLIZAP").separator("__"));
+        .build()
+        .unwrap_or_else(|error| {
+            log::error!("Unable to load configuration: {error}");
+            std::process::exit(1);
+        });
 
-    let settings = builder.build().unwrap_or_else(|e| {
-        log::warn!("failed to build config: {}", e);
-        conf::Config::default()
+    let file_cfg: FileConfig = settings.try_deserialize().unwrap_or_else(|error| {
+        log::error!("Invalid configuration: {error}");
+        std::process::exit(1);
     });
-
-    let file_cfg: FileConfig = settings.try_deserialize().unwrap_or_default();
 
     // Defaults
     const DEFAULT_BIND: &str = "127.0.0.1";
@@ -173,10 +187,15 @@ async fn main() -> std::io::Result<()> {
             std::process::exit(1);
         });
 
-    let tracking_database_url = env::var("DATABASE_URL").unwrap_or_else(|_| {
-        log::error!("Tracking database URL is required via DATABASE_URL env");
-        std::process::exit(1);
-    });
+    let tracking_database_url = file_cfg
+        .database_url
+        .or_else(|| env::var("DATABASE_URL").ok())
+        .unwrap_or_else(|| {
+            log::error!(
+                "Tracking database URL is required via database_url, BIBLIZAP_DATABASE_URL, or legacy DATABASE_URL"
+            );
+            std::process::exit(1);
+        });
 
     // Create tracking database connection pool with proper sizing for concurrent workers
     let database_pool = sqlx::postgres::PgPoolOptions::new()
@@ -250,6 +269,8 @@ Configuration files are searched in the following order:
     $XDG_CONFIG_HOME/biblizap/biblizap.toml (falls back to $HOME/.config/biblizap/biblizap.toml)
     /etc/biblizap/biblizap.toml
 
+Use --config PATH to load only an explicit TOML file instead of searching.
+
 Environment variables with the prefix BIBLIZAP_ are also read (e.g. BIBLIZAP_LENS_API_KEY).
 
 Values available in the config:
@@ -257,13 +278,18 @@ Values available in the config:
     - port
     - lens_api_key
     - cache_backend_url
+    - database_url
     - openalex_dump_path
 
-Secrets (Lens API key and Cache URL): prefer keeping `biblizap.toml` file mode 600, or set BIBLIZAP_LENS_API_KEY.
+Secrets: keep `biblizap.toml` file mode 600 when it contains API keys or database URLs.
 
 CLI flags override config and env."#),
 )]
 struct Args {
+    /// Explicit TOML configuration file; disables automatic file discovery
+    #[arg(long)]
+    config: Option<PathBuf>,
+
     /// Your Lens.org API key (optional; can come from config or env)
     #[arg(short, long)]
     lens_api_key: Option<String>,
@@ -287,4 +313,27 @@ struct Args {
     /// Log level for the application
     #[arg(short = 'L', long, default_value_t = log::LevelFilter::Info)]
     log_level: log::LevelFilter,
+}
+
+#[cfg(test)]
+mod config_tests {
+    use super::*;
+
+    #[test]
+    fn database_url_deserializes_from_toml() {
+        let config: FileConfig = conf::Config::builder()
+            .add_source(conf::File::from_str(
+                r#"database_url = "postgres://localhost/biblizap""#,
+                conf::FileFormat::Toml,
+            ))
+            .build()
+            .unwrap()
+            .try_deserialize()
+            .unwrap();
+
+        assert_eq!(
+            config.database_url.as_deref(),
+            Some("postgres://localhost/biblizap")
+        );
+    }
 }

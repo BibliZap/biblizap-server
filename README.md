@@ -59,32 +59,25 @@ This repository contains the backend server (built with Rust and Actix-web) and 
 
 If you want the server installed as a systemd service and run without privileges, use the provided `install.sh` script.
 
-Example (build first):
+Build and run the interactive installer:
 
 ```bash
-# build release binary first
 ./build.sh --release
-
-# install to /usr/local/bin, set bind address and port
-sudo ./install.sh \
-    --lens-api-key YOUR_LENS_API_KEY \
-    --install-dir /usr/local/bin \
-    --bind-address 127.0.0.1 \
-    --port 35642
+sudo ./install.sh
 ```
 
-What the installer does (when `systemd` is available):
+The installer:
+
 - Creates a system group and user `biblizap` (no login).
-- Installs the binary into the `--install-dir` (default `/usr/bin`).
-- Writes `/etc/biblizap/biblizap.toml` containing `bind_address`, `port` and `lens_api_key` (mode `600`, owner `biblizap`).
-- Writes a systemd unit at `/etc/systemd/system/biblizap.service`, enables and starts it.
+- Installs the binary at `/usr/bin/biblizap-server`.
+- Prompts for the API key and both PostgreSQL URLs without echoing secrets.
+- Writes `/etc/biblizap/biblizap.toml` with mode `600` and owner `biblizap`.
+- Installs the checked-in systemd unit, reloads systemd, enables the service, and
+  starts it.
 
-If `systemd` is not present on the target machine, the installer will only copy the binary to `--install-dir` and will not create the config or service.
-
-The installer defaults:
-- `--install-dir`: `/usr/bin`
-- `--bind-address`: `127.0.0.1`
-- `--port`: `35642`
+Existing configuration is preserved during upgrades. Use
+`sudo ./install.sh --reconfigure` to replace it; the installer creates a backup
+first. Use `--binary PATH` if the release binary is in a different location.
 
 To check service status after install:
 
@@ -100,18 +93,20 @@ sudo systemctl daemon-reload
 sudo systemctl restart biblizap.service
 ```
 
-### Running the Server
 ### Configuration
 
-The server can be configured in three ways (precedence highest -> lowest):
+The server configuration precedence is highest to lowest:
 
 1. Command-line flags (CLI)
-2. `./biblizap.toml`
-3. `$XDG_CONFIG_HOME/biblizap/biblizap.toml`
-4. `$HOME/.config/biblizap/biblizap.toml`
-5. `/etc/biblizap/biblizap.toml`
+2. `BIBLIZAP_` environment variables
+3. `./biblizap.toml`
+4. `$XDG_CONFIG_HOME/biblizap/biblizap.toml`
+5. `$HOME/.config/biblizap/biblizap.toml`
+6. `/etc/biblizap/biblizap.toml`
 
-For secrets, the installer writes `/etc/biblizap/biblizap.toml` with permissions set to `600` and owner `biblizap` when installing the systemd service. If you prefer, you can set the Lens API key via the environment variable `BIBLIZAP_LENS_API_KEY` instead of putting it in the toml file.
+Passing `--config PATH` disables file discovery and loads that explicit TOML file.
+Environment variables and CLI options still override its values. Keep a TOML file
+containing API keys or database URLs at mode `600`.
 
 Configuration keys available in the TOML file:
 
@@ -119,6 +114,7 @@ Configuration keys available in the TOML file:
 - `port` (integer) — port to listen on, e.g. `35642`
 - `lens_api_key` (string) — your Lens.org API key (keep file mode 600 if populated)
 - `cache_backend_url` (string) — PostgreSQL URL for the Lens cache backend
+- `database_url` (string) — PostgreSQL URL for tracking and corpus data
 - `openalex_dump_path` (string) — optional path to an OpenAlex gzipped JSON/JSONL dump file or dump directory
 
 Examples:
@@ -130,22 +126,27 @@ bind_address = "127.0.0.1"
 port = 35642
 lens_api_key = "REPLACE_WITH_YOUR_LENS_KEY"
 cache_backend_url = "postgres://biblizap:password@localhost/biblizap_cache"
+database_url = "postgres://biblizap:password@localhost/biblizap"
 openalex_dump_path = "/data/openalex/works/part_000.gz"
 ```
 
-CLI flags override values in the config file. You can also supply config values using environment variables with the `BIBLIZAP_` prefix, such as `BIBLIZAP_LENS_API_KEY` and `BIBLIZAP_OPENALEX_DUMP_PATH`.
+The legacy `DATABASE_URL` environment variable remains supported as a fallback.
+New deployments should use `database_url` in TOML or
+`BIBLIZAP_DATABASE_URL`.
 
 ### Running the Server
 
 You can run the compiled executable directly, or install it as a systemd service using `install.sh` (recommended on systems with systemd).
 
-Run the binary directly and supply the Lens API key (CLI flags override config files):
+Run the binary directly with an explicit configuration file:
 
 ```bash
-./target/release/biblizap-server --lens-api-key YOUR_LENS_API_KEY --bind-address 127.0.0.1 --port 35642
+./target/release/biblizap-server --config ./biblizap.toml
 ```
 
-Defaults: bind_address=127.0.0.1, port=35642. The server will listen on the configured address and port; if you omit flags, values are taken from `./biblizap.toml`, `$XDG_CONFIG_HOME/biblizap/biblizap.toml`, or `/etc/biblizap/biblizap.toml` (precedence shown in `--help`).
+Defaults: bind_address=127.0.0.1, port=35642. The server will listen on the
+configured address and port; if you omit flags, values are discovered using the
+precedence shown above and in `--help`.
 
 ### Building the OpenAlex Database
 
@@ -214,22 +215,20 @@ Build it with:
 cargo build --release --bin biblizap-monitor
 ```
 
-On the monitoring server, install the binary as
-`/usr/local/bin/biblizap-monitor`, copy `biblizap-monitor.example.toml` to
-`/etc/biblizap-monitor/biblizap-monitor.toml`, and replace all example values.
-The configuration file contains the SMTP password and should only be readable by
-the monitor user:
+On the monitoring server, run the interactive installer as root:
 
 ```bash
-sudo useradd --system --no-create-home --shell /usr/sbin/nologin biblizap-monitor
-sudo install -d -m 0700 -o biblizap-monitor -g biblizap-monitor /etc/biblizap-monitor
-sudo install -m 0600 -o biblizap-monitor -g biblizap-monitor \
-  biblizap-monitor.example.toml /etc/biblizap-monitor/biblizap-monitor.toml
-sudo install -m 0644 deploy/biblizap-monitor.service \
-  /etc/systemd/system/biblizap-monitor.service
-sudo systemctl daemon-reload
-sudo systemctl enable --now biblizap-monitor.service
+sudo ./install-monitor.sh
 ```
+
+It installs the binary at `/usr/bin/biblizap-monitor`, prompts for the health URL
+and SMTP settings, writes the configuration with mode `0600`, installs the
+systemd unit, enables it, and starts the service. Existing configuration is kept
+during upgrades; use `sudo ./install-monitor.sh --reconfigure` to replace it.
+
+Use `--binary PATH` when the release binary is located somewhere other than
+`./target/release/biblizap-monitor`. The configuration example remains available
+at `biblizap-monitor.example.toml` for manual installations.
 
 The default SMTP mode is required STARTTLS, normally used on port 587. Set
 `smtp.tls_mode = "implicit"` for implicit TLS, normally on port 465. Multiple alert
@@ -241,10 +240,11 @@ The last successfully announced service state is stored in
 outage emails are sent—even if the monitor restarts. A successful check after an
 announced outage sends one recovery email and records the service as up again.
 
-The monitor accepts `--config PATH`; its default is
-`/etc/biblizap-monitor/biblizap-monitor.toml`. Configuration values can be
-overridden with `BIBLIZAP_MONITOR_` environment variables using `__` for nested
-keys—for example, `BIBLIZAP_MONITOR_SMTP__PASSWORD`.
+The monitor accepts `--config PATH`. Without it, the monitor searches the current
+directory, the XDG configuration directory, and `/etc/biblizap-monitor` using the
+same precedence as the server. Configuration values can be overridden with
+`BIBLIZAP_MONITOR_` environment variables using `__` for nested keys—for example,
+`BIBLIZAP_MONITOR_SMTP__PASSWORD`.
 
 Monitor logs are available with:
 

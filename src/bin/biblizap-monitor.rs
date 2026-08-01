@@ -14,14 +14,16 @@ use lettre::{
 use reqwest::{Client, StatusCode, Url};
 use serde::Deserialize;
 
-const DEFAULT_CONFIG_PATH: &str = "/etc/biblizap-monitor/biblizap-monitor.toml";
-
 #[derive(Parser)]
-#[command(version, about = "Monitor BibliZap and send SMTP outage alerts")]
+#[command(
+    version,
+    about = "Monitor BibliZap and send SMTP outage alerts",
+    after_long_help = "Configuration search order when --config is omitted:\n    ./biblizap-monitor.toml\n    $XDG_CONFIG_HOME/biblizap-monitor/biblizap-monitor.toml\n      (falls back to $HOME/.config/biblizap-monitor/biblizap-monitor.toml)\n    /etc/biblizap-monitor/biblizap-monitor.toml\n\nBIBLIZAP_MONITOR_ environment variables override TOML values."
+)]
 struct Args {
-    /// Path to the monitor TOML configuration file
-    #[arg(long, default_value = DEFAULT_CONFIG_PATH)]
-    config: PathBuf,
+    /// Explicit TOML configuration file; disables automatic file discovery
+    #[arg(long)]
+    config: Option<PathBuf>,
 }
 
 #[derive(Clone)]
@@ -188,9 +190,38 @@ impl MonitorState {
 }
 
 impl Config {
-    fn load(path: PathBuf) -> Result<Self, Box<dyn Error>> {
-        let file_config: FileConfig = conf::Config::builder()
-            .add_source(conf::File::from(path))
+    fn load(path: Option<PathBuf>) -> Result<Self, Box<dyn Error>> {
+        let user_config_dir = std::env::var("XDG_CONFIG_HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| {
+                std::env::var("HOME")
+                    .map(|home| PathBuf::from(home).join(".config"))
+                    .unwrap_or_default()
+            });
+
+        let builder = conf::Config::builder();
+        let builder = if let Some(path) = path {
+            builder.add_source(conf::File::from(path))
+        } else {
+            builder
+                .add_source(
+                    conf::File::from(PathBuf::from("/etc/biblizap-monitor/biblizap-monitor.toml"))
+                        .required(false),
+                )
+                .add_source(
+                    conf::File::from(
+                        user_config_dir
+                            .join("biblizap-monitor")
+                            .join("biblizap-monitor.toml"),
+                    )
+                    .required(false),
+                )
+                .add_source(
+                    conf::File::from(PathBuf::from("biblizap-monitor.toml")).required(false),
+                )
+        };
+
+        let file_config: FileConfig = builder
             .add_source(
                 conf::Environment::with_prefix("BIBLIZAP_MONITOR")
                     .prefix_separator("_")
