@@ -1,3 +1,5 @@
+//! External health monitor for a BibliZap deployment.
+
 use std::{
     error::Error,
     fs, io,

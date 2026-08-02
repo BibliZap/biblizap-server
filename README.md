@@ -212,7 +212,7 @@ outage alert has been delivered.
 Build it with:
 
 ```bash
-cargo build --release --bin biblizap-monitor
+cargo build --release -p biblizap-monitor
 ```
 
 On the monitoring server, run the interactive installer as root:

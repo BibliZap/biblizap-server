@@ -67,7 +67,7 @@ fi
 
 if [ ! -f "$BINARY_SOURCE" ]; then
 	echo "Monitor binary not found at '$BINARY_SOURCE'." >&2
-	echo "Build it first with: cargo build --release --bin biblizap-monitor" >&2
+	echo "Build it first with: cargo build --release -p biblizap-monitor" >&2
 	exit 1
 fi
 

@@ -548,6 +548,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "biblizap-monitor"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "config",
+ "env_logger",
+ "lettre",
+ "log",
+ "reqwest",
+ "serde",
+ "tokio",
+]
+
+[[package]]
 name = "biblizap-rs"
 version = "1.2.2"
 dependencies = [
@@ -585,7 +599,6 @@ dependencies = [
  "dotenvy",
  "env_logger",
  "hex",
- "lettre",
  "log",
  "num_cpus",
  "reqwest",
