@@ -5,7 +5,7 @@ use wasm_bindgen_futures::spawn_local;
 use yew::prelude::*;
 use yew_router::prelude::*;
 
-use crate::common::{BibliZapResultsQuery, Route, SeedSelectionQuery};
+use crate::common::{BibliZapResultsQuery, Route, SeedSelectionQuery, MAX_SEEDS};
 use crate::results::{Article, Item, Spinner};
 
 #[derive(Clone, PartialEq)]
@@ -167,23 +167,11 @@ fn SeedSelectionLoaded(props: &SeedSelectionLoadedProps) -> Html {
         Callback::from(move |(doi, checked): (String, bool)| {
             let mut s = (*selected).clone();
             if checked {
-                s.insert(doi);
+                if s.len() < MAX_SEEDS {
+                    s.insert(doi);
+                }
             } else {
                 s.remove(&doi);
-            }
-            selected.set(s);
-        })
-    };
-
-    let select_all = {
-        let selected = selected.clone();
-        let articles = props.articles.clone();
-        Callback::from(move |_: MouseEvent| {
-            let mut s = HashSet::new();
-            for article in &articles {
-                if let Some(id) = article.id() {
-                    s.insert(id);
-                }
             }
             selected.set(s);
         })
@@ -204,13 +192,10 @@ fn SeedSelectionLoaded(props: &SeedSelectionLoadedProps) -> Html {
                     <p class="text-muted mb-0 small">
                         { format!("{n_total} article{}", if n_total == 1 { "" } else { "s" }) }
                         { if n_selected > 0 { format!(" · {n_selected} selected") } else { String::new() } }
+                        { format!(" · maximum {MAX_SEEDS} seeds") }
                     </p>
                 </div>
                 <div class="d-flex gap-2">
-                    <button class="btn btn-outline-secondary btn-sm" onclick={select_all.clone()}>
-                        <i class="bi bi-check-all me-1" />
-                        {"Select All"}
-                    </button>
                     <button class="btn btn-outline-secondary btn-sm" onclick={clear_all} disabled={n_selected == 0}>
                         <i class="bi bi-x me-1" />
                         {"Clear"}
@@ -221,6 +206,12 @@ fn SeedSelectionLoaded(props: &SeedSelectionLoadedProps) -> Html {
                     </button>
                 </div>
             </div>
+
+            if n_selected == MAX_SEEDS {
+                <div class="alert alert-info py-2" role="status">
+                    {format!("The maximum of {MAX_SEEDS} seed articles has been selected. Deselect one to choose another.")}
+                </div>
+            }
 
             { if props.articles.is_empty() {
                 html! {
@@ -237,6 +228,7 @@ fn SeedSelectionLoaded(props: &SeedSelectionLoadedProps) -> Html {
                                 {index}
                                 update_selected={update_selected.clone()}
                                 selected_articles={(*selected).clone()}
+                                selection_disabled={n_selected >= MAX_SEEDS}
                             />
                         }).collect::<Html>() }
                     </div>

@@ -28,7 +28,7 @@ async fn handle_request(
     let parameters = serde_json::from_str::<SnowballParameters>(req_body)?;
     log::info!("Received request: {:?}", parameters);
 
-    // Server-side validation: check max 7 IDs
+    // Server-side validation: enforce the seed limit independently of the frontend.
     if parameters.input_id_list.len() > MAX_IDS {
         return Err(Error::TooManyIds(parameters.input_id_list.len()));
     }

@@ -12,6 +12,9 @@ pub struct ItemProps {
     pub selected_articles: HashSet<String>,
     #[prop_or_default]
     pub is_seed: bool,
+    /// Prevent selecting an unselected item while preserving the ability to deselect it.
+    #[prop_or_default]
+    pub selection_disabled: bool,
 }
 
 #[derive(Clone, PartialEq, Properties)]
@@ -109,6 +112,7 @@ pub fn Item(props: &ItemProps) -> Html {
         .as_ref()
         .map(|id| props.selected_articles.contains(id))
         .unwrap_or(false);
+    let selection_disabled = props.selection_disabled && !is_selected;
 
     let onchange = {
         let update_selected = props.update_selected.clone();
@@ -128,8 +132,10 @@ pub fn Item(props: &ItemProps) -> Html {
         let update_selected = props.update_selected.clone();
         let id = article_id.clone();
         Callback::from(move |_: MouseEvent| {
-            if let Some(id) = &id {
-                update_selected.emit((id.clone(), !is_selected));
+            if !selection_disabled {
+                if let Some(id) = &id {
+                    update_selected.emit((id.clone(), !is_selected));
+                }
             }
         })
     };
@@ -152,6 +158,7 @@ pub fn Item(props: &ItemProps) -> Html {
                         class="result-item-checkbox"
                         type="checkbox"
                         checked={is_selected}
+                        disabled={selection_disabled}
                         onchange={onchange}
                         onclick={stop_click.clone()}
                     />

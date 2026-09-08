@@ -4,6 +4,9 @@ use web_sys::Navigator;
 use yew::prelude::*;
 use yew_router::prelude::*;
 
+/// Maximum number of seed articles accepted by the BibliZap server.
+pub const MAX_SEEDS: usize = 100;
+
 /// Custom error type for the frontend application.
 #[derive(Error, Debug)]
 pub enum Error {
@@ -37,7 +40,7 @@ pub enum Error {
     UnrecognizedUserAgent(String),
     #[error("Invalid identifier format: '{0}' is neither a valid DOI nor PMID")]
     InvalidIdFormat(String),
-    #[error("Too many identifiers: maximum 10 allowed, got {0}")]
+    #[error("Too many identifiers: maximum 100 allowed, got {0}")]
     TooManyIds(usize),
     #[error("No valid identifiers provided")]
     NoValidIds,

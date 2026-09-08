@@ -191,6 +191,7 @@ pub fn biblizap_search_bar(props: &SearchBarProps) -> Html {
     });
 
     let id_list = use_state(|| props.value.clone());
+    let validation_error = use_state(|| None::<String>);
     use_effect_with(props.value.clone(), {
         let id_list = id_list.clone();
         move |v| {
@@ -202,10 +203,12 @@ pub fn biblizap_search_bar(props: &SearchBarProps) -> Html {
     let onchange = {
         let id_list_node = id_list_node.clone();
         let id_list = id_list.clone();
+        let validation_error = validation_error.clone();
         Callback::from(move |_| {
             let input = id_list_node.cast::<web_sys::HtmlInputElement>();
             if let Some(input) = input {
                 id_list.set(input.value());
+                validation_error.set(None);
             }
         })
     };
@@ -214,6 +217,7 @@ pub fn biblizap_search_bar(props: &SearchBarProps) -> Html {
         let id_list_node = id_list_node.clone();
         let advanced_params = advanced_params.clone();
         let navigator = navigator.clone();
+        let validation_error = validation_error.clone();
 
         Callback::from(move |event: SubmitEvent| {
             event.prevent_default();
@@ -222,8 +226,13 @@ pub fn biblizap_search_bar(props: &SearchBarProps) -> Html {
             let input_trimmed = input_text.trim().to_string();
 
             if input_trimmed.is_empty() {
+                validation_error.set(Some(
+                    "Enter at least one identifier or keyword.".to_string(),
+                ));
                 return;
             }
+
+            validation_error.set(None);
 
             if contains_keywords(&input_trimmed) {
                 // Keyword search → navigate to PubMed results page (expert params n/a)
@@ -239,10 +248,16 @@ pub fn biblizap_search_bar(props: &SearchBarProps) -> Html {
                     .map(|s| s.to_string())
                     .collect();
 
-                if ids.len() > 7 {
+                if ids.len() > MAX_SEEDS {
+                    validation_error.set(Some(format!(
+                        "You can use at most {MAX_SEEDS} seed articles per search."
+                    )));
                     return;
                 }
                 if ids.iter().any(|id| !is_valid_id(id)) {
+                    validation_error.set(Some(
+                        "One or more identifiers are not valid PMIDs or DOIs.".to_string(),
+                    ));
                     return;
                 }
                 if ids.is_empty() {
@@ -298,6 +313,9 @@ pub fn biblizap_search_bar(props: &SearchBarProps) -> Html {
                     </button>
                 </div>
                 <div id="idInputHelp" class="form-text">{"Enter DOIs or PMIDs to run BibliZap directly, or enter keywords to search PubMed first."}</div>
+                if let Some(error) = &*validation_error {
+                    <div class="text-danger small mt-2" role="alert">{error}</div>
+                }
             </div>
             <SearchAdvancedPanel show_advanced={show_advanced.clone()} advanced_params={advanced_params.clone()} on_denylists_change={props.on_denylists_change.clone()} />
         </form>
