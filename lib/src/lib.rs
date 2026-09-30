@@ -44,7 +44,12 @@ fn compare_ranked_articles(
     article_b
         .score
         .cmp(&article_a.score)
-        .then_with(|| article_b.citations.unwrap_or(0).cmp(&article_a.citations.unwrap_or(0)))
+        .then_with(|| {
+            article_b
+                .citations
+                .unwrap_or(0)
+                .cmp(&article_a.citations.unwrap_or(0))
+        })
         .then_with(|| id_a.cmp(id_b))
 }
 
@@ -130,9 +135,11 @@ impl From<lens::article::ArticleWithData> for Article {
 ///
 /// # Returns
 ///
-/// A `Result` containing a `Vec` of `Article` structs sorted by descending score,
-/// descending citation count, then ascending Lens ID,
-/// or an `Error` if the operation fails.
+/// A `Result` containing up to `output_max_size` `Article` structs sorted by
+/// descending score, descending citation count, then ascending Lens ID.
+/// At the size cutoff, equal-score candidates are selected by Lens ID before
+/// citation counts are fetched; the tie-break ranking applies to returned articles.
+/// Returns an `Error` if the operation fails.
 pub async fn snowball<S>(
     id_list: &[S],
     max_depth: u8,
@@ -162,24 +169,15 @@ where
     .await?;
 
     let score_hashmap = snowball_id.into_inner();
-    if output_max_size == 0 || score_hashmap.is_empty() {
-        return Ok(Vec::new());
-    }
-
     let mut ranked_ids = score_hashmap.iter().collect::<Vec<_>>();
     ranked_ids.sort_by(|(id_a, score_a), (id_b, score_b)| {
         score_b.cmp(score_a).then_with(|| id_a.cmp(id_b))
     });
-    // Citation counts are only available after completion. Include every article
-    // tied at the cutoff so citations can genuinely decide who makes the top N.
-    let cutoff_score = ranked_ids
-        .get(output_max_size.saturating_sub(1))
-        .or_else(|| ranked_ids.last())
-        .map(|(_, score)| **score)
-        .unwrap();
+    // Keep the existing completion budget. Lens ID makes score ties at the
+    // cutoff deterministic; citation counts are fetched only for selected IDs.
     let selected_id: Vec<LensId> = ranked_ids
         .into_iter()
-        .take_while(|(_, score)| **score >= cutoff_score)
+        .take(output_max_size)
         .map(|(id, _)| id.clone())
         .collect();
 
@@ -197,9 +195,11 @@ where
 
     articles_kv.retain(|(_, article)| article.score.is_some());
     articles_kv.sort_by(compare_ranked_articles);
-    articles_kv.truncate(output_max_size);
 
-    Ok(articles_kv.into_iter().map(|(_, article)| article).collect())
+    Ok(articles_kv
+        .into_iter()
+        .map(|(_, article)| article)
+        .collect())
 }
 
 /// Fetches full article metadata for a mixed list of raw identifiers.
