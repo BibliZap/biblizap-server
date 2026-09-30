@@ -34,13 +34,13 @@ pub async fn get_pubmed_pmids(query: &str) -> Result<Vec<String>, Error> {
 
 enum PageState {
     Loading,
-    Loaded(String),
+    Loaded { hash: String, pmids: Vec<String> },
     Error(String),
 }
 
 /// The PubMed results page.
-/// Reads `?q=` from the URL, fetches DOIs from PubMed, uploads them as a corpus,
-/// then navigates directly to seed selection.
+/// Reads `?q=` from the URL, fetches PMIDs from PubMed, uploads them as a corpus,
+/// then displays seed selection in PubMed's relevance order.
 #[function_component(PubMedResultsPage)]
 pub fn pubmed_results_page() -> Html {
     use crate::common::{FormPosition, Route};
@@ -76,7 +76,7 @@ pub fn pubmed_results_page() -> Html {
         use_effect_with(query.clone(), move |_| {
             if !query.is_empty() {
                 spawn_local(async move {
-                    let dois = match get_pubmed_pmids(&query).await {
+                    let pmids = match get_pubmed_pmids(&query).await {
                         Ok(d) if d.is_empty() => {
                             page_state.set(PageState::Error(
                                 "No articles found for this query.".to_string(),
@@ -90,9 +90,12 @@ pub fn pubmed_results_page() -> Html {
                         }
                     };
 
-                    match upload_denylist_to_backend(dois).await {
+                    match upload_denylist_to_backend(pmids.clone()).await {
                         Ok(hash) => {
-                            page_state.set(PageState::Loaded(hex::encode(hash)));
+                            page_state.set(PageState::Loaded {
+                                hash: hex::encode(hash),
+                                pmids,
+                            });
                         }
                         Err(e) => {
                             page_state.set(PageState::Error(format!("Upload failed: {e}")));
@@ -107,8 +110,8 @@ pub fn pubmed_results_page() -> Html {
     let content = match &*page_state {
         PageState::Loading => html! { <Spinner /> },
         PageState::Error(msg) => html! { <ErrorMessage msg={msg.clone()} /> },
-        PageState::Loaded(hash) => {
-            html! { <SeedPicker bibliography_hash={hash.clone()} use_bibliography_as_denylist={false} /> }
+        PageState::Loaded { hash, pmids } => {
+            html! { <SeedPicker bibliography_hash={hash.clone()} ordered_pmids={pmids.clone()} use_bibliography_as_denylist={false} /> }
         }
     };
 

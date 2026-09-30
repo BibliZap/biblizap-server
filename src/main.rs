@@ -12,6 +12,8 @@ mod corpus;
 mod health;
 mod snowball;
 mod tracking;
+#[path = "../shared/upload_limit.rs"]
+mod upload_limit;
 mod usage;
 
 use snowball::*;
@@ -235,7 +237,12 @@ async fn main() -> std::io::Result<()> {
                     .route(web::get().to(corpus::download_corpus)),
             )
             .service(
-                web::resource("/api/corpus/upload").route(web::post().to(corpus::upload_corpus)),
+                web::resource("/api/corpus/upload")
+                    // The client uploads extracted identifiers, not the original RIS/NBIB file.
+                    .app_data(web::PayloadConfig::new(
+                        upload_limit::CORPUS_UPLOAD_LIMIT_MIB * 1024 * 1024,
+                    ))
+                    .route(web::post().to(corpus::upload_corpus)),
             )
             .service(
                 web::resource("/api/corpus/enrich/{hash_hex}")

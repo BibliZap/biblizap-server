@@ -4,7 +4,7 @@ use web_sys::{DragEvent, HtmlInputElement};
 use yew::prelude::*;
 use yew_router::prelude::*;
 
-use crate::common::{Route, SeedSelectionQuery};
+use crate::common::{Route, SeedSelectionQuery, MAX_SEEDS};
 use crate::search::denylist::{extract_dois, upload_denylist_to_backend};
 
 #[function_component]
@@ -254,6 +254,11 @@ fn BibDropZone(props: &BibDropZoneProps) -> Html {
                 <span class="fw-medium">{"Click to upload or drag & drop"}</span>
                 <small class="text-muted">{".ris, .nbib, .bzd"}</small>
             }
+            <small class="text-muted">
+                {format!("You can select up to {MAX_SEEDS} seed articles. ")}
+                <a href="mailto:contact@biblizap.org">{"Contact us"}</a>
+                {" to request a higher limit."}
+            </small>
             <input type="file" accept=".ris,.nbib,.bzd" hidden=true onchange={onchange} />
         </label>
     }
@@ -352,6 +357,9 @@ fn ExclDropZone(props: &ExclDropZoneProps) -> Html {
                 <span class="fw-medium">{"Click to upload or drag & drop"}</span>
                 <small class="text-muted">{".ris, .nbib, .bzd \u{00b7} multiple files supported"}</small>
             }
+            <small class="text-muted">
+                {"There is no limit on already read / excluded articles. "}
+            </small>
             <input type="file" accept=".ris,.nbib,.bzd" hidden=true onchange={onchange} />
         </label>
     }

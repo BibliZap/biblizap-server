@@ -37,6 +37,17 @@ pub struct Article {
     pub score: Option<i32>,
 }
 
+fn compare_ranked_articles(
+    (id_a, article_a): &(LensId, Article),
+    (id_b, article_b): &(LensId, Article),
+) -> std::cmp::Ordering {
+    article_b
+        .score
+        .cmp(&article_a.score)
+        .then_with(|| article_b.citations.unwrap_or(0).cmp(&article_a.citations.unwrap_or(0)))
+        .then_with(|| id_a.cmp(id_b))
+}
+
 impl From<lens::article::Article> for Article {
     fn from(article: lens::article::Article) -> Self {
         Article {
@@ -119,7 +130,8 @@ impl From<lens::article::ArticleWithData> for Article {
 ///
 /// # Returns
 ///
-/// A `Result` containing a `Vec` of `Article` structs sorted by score,
+/// A `Result` containing a `Vec` of `Article` structs sorted by descending score,
+/// descending citation count, then ascending Lens ID,
 /// or an `Error` if the operation fails.
 pub async fn snowball<S>(
     id_list: &[S],
@@ -150,12 +162,26 @@ where
     .await?;
 
     let score_hashmap = snowball_id.into_inner();
+    if output_max_size == 0 || score_hashmap.is_empty() {
+        return Ok(Vec::new());
+    }
 
-    let mut s = score_hashmap.iter().collect::<Vec<_>>();
-    s.sort_by_key(|x| std::cmp::Reverse(x.1));
-    s.truncate(output_max_size);
-
-    let selected_id: Vec<LensId> = s.iter().map(|(id, _)| (*id).clone()).collect();
+    let mut ranked_ids = score_hashmap.iter().collect::<Vec<_>>();
+    ranked_ids.sort_by(|(id_a, score_a), (id_b, score_b)| {
+        score_b.cmp(score_a).then_with(|| id_a.cmp(id_b))
+    });
+    // Citation counts are only available after completion. Include every article
+    // tied at the cutoff so citations can genuinely decide who makes the top N.
+    let cutoff_score = ranked_ids
+        .get(output_max_size.saturating_sub(1))
+        .or_else(|| ranked_ids.last())
+        .map(|(_, score)| **score)
+        .unwrap();
+    let selected_id: Vec<LensId> = ranked_ids
+        .into_iter()
+        .take_while(|(_, score)| **score >= cutoff_score)
+        .map(|(id, _)| id.clone())
+        .collect();
 
     let lens_articles =
         lens::complete_articles(&selected_id, api_key, Some(client_ref), cache).await?;
@@ -169,15 +195,11 @@ where
         v.score = score_hashmap.get(k).map(|x| *x as i32);
     }
 
-    let mut articles = articles_kv
-        .into_iter()
-        .map(|(_, article)| article)
-        .filter(|article| article.score.is_some())
-        .collect::<Vec<_>>();
+    articles_kv.retain(|(_, article)| article.score.is_some());
+    articles_kv.sort_by(compare_ranked_articles);
+    articles_kv.truncate(output_max_size);
 
-    articles.sort_by_key(|v| v.score.unwrap_or_default());
-
-    Ok(articles)
+    Ok(articles_kv.into_iter().map(|(_, article)| article).collect())
 }
 
 /// Fetches full article metadata for a mixed list of raw identifiers.
@@ -209,6 +231,39 @@ pub async fn enrich_by_raw_ids(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ranking_uses_score_then_citations_then_lens_id() {
+        let article = |score, citations| Article {
+            first_author: None,
+            year_published: None,
+            journal: None,
+            title: None,
+            summary: None,
+            doi: None,
+            pmid: None,
+            citations,
+            score: Some(score),
+        };
+        let mut ranked = vec![
+            (LensId::from(4), article(5, Some(50))),
+            (LensId::from(3), article(5, Some(100))),
+            (LensId::from(2), article(6, None)),
+            (LensId::from(1), article(5, Some(100))),
+        ];
+
+        ranked.sort_by(compare_ranked_articles);
+
+        assert_eq!(
+            ranked.into_iter().map(|(id, _)| id).collect::<Vec<_>>(),
+            vec![
+                LensId::from(2),
+                LensId::from(1),
+                LensId::from(3),
+                LensId::from(4)
+            ]
+        );
+    }
 
     /// Helper function to get API key from environment
     #[cfg(feature = "cache-sqlite")]

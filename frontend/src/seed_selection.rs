@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use gloo_net::http::Request;
 use wasm_bindgen_futures::spawn_local;
@@ -21,6 +21,9 @@ enum LoadState {
 #[derive(Clone, PartialEq, Properties)]
 pub struct SeedPickerProps {
     pub bibliography_hash: String,
+    /// Original PubMed ESearch order, when selecting seeds from a keyword query.
+    #[prop_or_default]
+    pub ordered_pmids: Vec<String>,
     /// Optional hex-encoded SHA-256 hash of an exclusion corpus to pre-filter results.
     #[prop_or_default]
     pub exclusion_hash: Option<String>,
@@ -68,14 +71,33 @@ pub fn SeedPicker(props: &SeedPickerProps) -> Html {
     match (*load_state).clone() {
         LoadState::Loading => html! { <Spinner /> },
         LoadState::Error(msg) => html! { <SeedSelectionError {msg} /> },
-        LoadState::Loaded(articles) => html! {
-            <SeedSelectionLoaded
-                {articles}
-                bibliography_hash={props.bibliography_hash.clone()}
-                exclusion_hash={props.exclusion_hash.clone()}
-                use_bibliography_as_denylist={props.use_bibliography_as_denylist}
-            />
-        },
+        LoadState::Loaded(mut articles) => {
+            if !props.ordered_pmids.is_empty() {
+                // Corpus storage deduplicates identifiers and loses ESearch's relevance order.
+                let ranks: HashMap<&str, usize> = props
+                    .ordered_pmids
+                    .iter()
+                    .enumerate()
+                    .map(|(rank, pmid)| (pmid.as_str(), rank))
+                    .collect();
+                articles.sort_by_key(|article| {
+                    article
+                        .pmid
+                        .as_deref()
+                        .and_then(|pmid| ranks.get(pmid))
+                        .copied()
+                        .unwrap_or(usize::MAX)
+                });
+            }
+            html! {
+                <SeedSelectionLoaded
+                    {articles}
+                    bibliography_hash={props.bibliography_hash.clone()}
+                    exclusion_hash={props.exclusion_hash.clone()}
+                    use_bibliography_as_denylist={props.use_bibliography_as_denylist}
+                />
+            }
+        }
     }
 }
 

@@ -19,6 +19,9 @@ use search::*;
 
 mod common;
 
+#[path = "../../shared/upload_limit.rs"]
+mod upload_limit;
+
 mod systematic_review;
 use systematic_review::*;
 

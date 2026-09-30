@@ -313,6 +313,11 @@ pub fn biblizap_search_bar(props: &SearchBarProps) -> Html {
                     </button>
                 </div>
                 <div id="idInputHelp" class="form-text">{"Enter DOIs or PMIDs to run BibliZap directly, or enter keywords to search PubMed first."}</div>
+                <div class="form-text">
+                    {format!("You can use up to {MAX_SEEDS} seed articles per search. ")}
+                    <a href="mailto:contact@biblizap.org">{"Contact us"}</a>
+                    {" to request a higher limit."}
+                </div>
                 if let Some(error) = &*validation_error {
                     <div class="text-danger small mt-2" role="alert">{error}</div>
                 }

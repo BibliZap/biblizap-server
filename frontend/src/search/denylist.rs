@@ -5,12 +5,16 @@ use wasm_bindgen_futures::spawn_local;
 use web_sys::HtmlInputElement;
 use yew::prelude::*;
 
+use crate::upload_limit::CORPUS_UPLOAD_LIMIT_MIB;
+
 #[derive(Debug, thiserror::Error)]
 pub enum DenylistError {
     #[error("Network error: {0}")]
     NetworkError(#[from] gloo_net::Error),
     #[error("Backend status code: {0}")]
     BackendError(u16),
+    #[error("Upload too large (BibliZap limit: {limit_mib} MiB of extracted identifiers; a proxy may allow less)")]
+    UploadTooLarge { limit_mib: usize },
     #[error("Invalid hash format")]
     InvalidHashFormat,
 }
@@ -28,11 +32,24 @@ pub fn decode_denylist_hash(hash_str: &str) -> Result<[u8; 32], DenylistError> {
 
 pub async fn upload_denylist_to_backend(dois: Vec<String>) -> Result<[u8; 32], DenylistError> {
     let body = dois.join("\n");
+    if body.len() > CORPUS_UPLOAD_LIMIT_MIB * 1024 * 1024 {
+        return Err(DenylistError::UploadTooLarge {
+            limit_mib: CORPUS_UPLOAD_LIMIT_MIB,
+        });
+    }
     let response = gloo_net::http::Request::post("/api/corpus/upload")
         .header("Content-Type", "text/plain")
         .body(body)?
         .send()
         .await?;
+    if response.status() == 413 {
+        return Err(DenylistError::UploadTooLarge {
+            limit_mib: CORPUS_UPLOAD_LIMIT_MIB,
+        });
+    }
+    if !response.ok() {
+        return Err(DenylistError::BackendError(response.status()));
+    }
     let hex_str = response.text().await?;
     let hash = decode_denylist_hash(&hex_str)?;
     Ok(hash)
@@ -70,6 +87,7 @@ pub fn Denylist(props: &DenylistProps) -> Html {
     // Cache hash → article count; each hash is fetched at most once.
     let count_cache: UseStateHandle<HashMap<[u8; 32], usize>> = use_state(HashMap::new);
     let uploading = use_state(|| false);
+    let upload_error = use_state(|| None::<String>);
     let reader_task = use_mut_ref(|| None);
 
     // For any hash not yet in the cache, download it and store its count.
@@ -101,30 +119,37 @@ pub fn Denylist(props: &DenylistProps) -> Html {
         let reader_task = reader_task.clone();
         let on_add = props.on_add.clone();
         let count_cache = count_cache.clone();
+        let upload_error = upload_error.clone();
         Callback::from(move |e: Event| {
             let input: HtmlInputElement = e.target_unchecked_into();
             let Some(file) = input.files().and_then(|f| f.get(0)) else {
                 return;
             };
             let file = File::from(file);
+            upload_error.set(None);
             uploading.set(true);
             let uploading = uploading.clone();
             let on_add = on_add.clone();
             let count_cache = count_cache.clone();
+            let upload_error = upload_error.clone();
             let task = read_as_text(&file, move |result| {
                 let Ok(content) = result else {
+                    upload_error.set(Some("Failed to read the file.".to_string()));
                     uploading.set(false);
                     return;
                 };
                 let dois = extract_dois(&content).unwrap_or_default();
                 let count = dois.len();
                 spawn_local(async move {
-                    if let Ok(hash) = upload_denylist_to_backend(dois).await {
-                        // Pre-populate cache so the chip shows the count immediately.
-                        let mut new_cache = (*count_cache).clone();
-                        new_cache.insert(hash, count);
-                        count_cache.set(new_cache);
-                        on_add.emit(hash);
+                    match upload_denylist_to_backend(dois).await {
+                        Ok(hash) => {
+                            // Pre-populate cache so the chip shows the count immediately.
+                            let mut new_cache = (*count_cache).clone();
+                            new_cache.insert(hash, count);
+                            count_cache.set(new_cache);
+                            on_add.emit(hash);
+                        }
+                        Err(error) => upload_error.set(Some(error.to_string())),
                     }
                     uploading.set(false);
                 });
@@ -147,6 +172,9 @@ pub fn Denylist(props: &DenylistProps) -> Html {
                 <DenylistUploadButton on_file_change={on_file_change} />
             } else {
                 <DenylistLoading />
+            }
+            if let Some(error) = &*upload_error {
+                <span class="text-danger" role="alert">{error}</span>
             }
         </div>
     }
