@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT \n            to_timestamp(request_started_ms / 1000)::date AS \"date_bucket!\",\n            COUNT(*) as \"total_requests!\"\n        FROM bbz_events\n        WHERE event_type = 'search_success'\n        GROUP BY 1\n        ORDER BY 1 DESC\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "date_bucket!",
+        "type_info": "Date",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "total_requests!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "3198f8760d809ae13b386cbd72d3072d02c530638d4aa005c08dc43543f96dd9"
+}

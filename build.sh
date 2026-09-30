@@ -29,6 +29,6 @@ popd > /dev/null
 
 # Build backend with cargo
 echo "🛠️ Building Actix backend with Cargo..."
-cargo build $CARGO_FLAGS
+SQLX_OFFLINE=true cargo build $CARGO_FLAGS
 
 echo "✅ Build ($BUILD_MODE) completed successfully!"

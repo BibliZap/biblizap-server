@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO bbz_corpora (hash, data)\n            VALUES ($1, $2)\n            ON CONFLICT (hash) DO NOTHING\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d05d8f314b036ca7e1dbb88d75d67d55c0bc5e501d8cb96106ed5ef729ff84cf"
+}

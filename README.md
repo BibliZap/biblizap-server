@@ -53,7 +53,12 @@ This repository contains the backend server (built with Rust and Actix-web) and 
 
     This script will:
     - Build the Yew frontend with `trunk build --release`
-    - Then compile the Actix backend with `cargo build --release`
+    - Then compile the Actix backend with `cargo build --release` using the
+      versioned SQLx offline query metadata; no build-time database is required
+
+    When a `sqlx::query!` invocation or the database schema changes, regenerate
+    the `.sqlx` metadata against an up-to-date development database with
+    `cargo sqlx prepare` and commit the resulting files.
 
 4. Optional: install system service
 
