@@ -110,9 +110,8 @@ pub fn Results(props: &ResultsProps) -> Html {
                 return ord;
             }
         }
-        b.score
-            .cmp(&a.score)
-            .then_with(|| b.citations.unwrap_or(0).cmp(&a.citations.unwrap_or(0)))
+        // Stable sorting keeps the backend's Lens ID order on score ties.
+        b.score.cmp(&a.score)
     });
 
     let on_rerun_click = {
@@ -268,12 +267,8 @@ pub async fn run_snowball_with_ids(
     let value = serde_json::from_str::<serde_json::Value>(&result_text)?;
     let mut articles = serde_json::from_value::<Vec<Article>>(value)?;
 
-    // Stable sorting preserves the backend's Lens ID order for exact ties.
-    articles.sort_by(|a, b| {
-        b.score
-            .cmp(&a.score)
-            .then_with(|| b.citations.unwrap_or(0).cmp(&a.citations.unwrap_or(0)))
-    });
+    // Stable sorting preserves the backend's Lens ID order for score ties.
+    articles.sort_by(|a, b| b.score.cmp(&a.score));
 
     Ok(articles)
 }

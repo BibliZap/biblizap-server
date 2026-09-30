@@ -44,12 +44,6 @@ fn compare_ranked_articles(
     article_b
         .score
         .cmp(&article_a.score)
-        .then_with(|| {
-            article_b
-                .citations
-                .unwrap_or(0)
-                .cmp(&article_a.citations.unwrap_or(0))
-        })
         .then_with(|| id_a.cmp(id_b))
 }
 
@@ -136,9 +130,8 @@ impl From<lens::article::ArticleWithData> for Article {
 /// # Returns
 ///
 /// A `Result` containing up to `output_max_size` `Article` structs sorted by
-/// descending score, descending citation count, then ascending Lens ID.
-/// At the size cutoff, equal-score candidates are selected by Lens ID before
-/// citation counts are fetched; the tie-break ranking applies to returned articles.
+/// descending score, then ascending Lens ID. The same ordering determines
+/// which articles are retained at the size cutoff.
 /// Returns an `Error` if the operation fails.
 pub async fn snowball<S>(
     id_list: &[S],
@@ -174,7 +167,7 @@ where
         score_b.cmp(score_a).then_with(|| id_a.cmp(id_b))
     });
     // Keep the existing completion budget. Lens ID makes score ties at the
-    // cutoff deterministic; citation counts are fetched only for selected IDs.
+    // cutoff deterministic without needing article metadata.
     let selected_id: Vec<LensId> = ranked_ids
         .into_iter()
         .take(output_max_size)
@@ -233,7 +226,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn ranking_uses_score_then_citations_then_lens_id() {
+    fn ranking_uses_score_then_lens_id_regardless_of_citations() {
         let article = |score, citations| Article {
             first_author: None,
             year_published: None,
@@ -246,10 +239,10 @@ mod tests {
             score: Some(score),
         };
         let mut ranked = vec![
-            (LensId::from(4), article(5, Some(50))),
+            (LensId::from(4), article(5, Some(500))),
             (LensId::from(3), article(5, Some(100))),
             (LensId::from(2), article(6, None)),
-            (LensId::from(1), article(5, Some(100))),
+            (LensId::from(1), article(5, None)),
         ];
 
         ranked.sort_by(compare_ranked_articles);
