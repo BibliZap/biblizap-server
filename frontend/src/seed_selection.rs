@@ -24,9 +24,9 @@ pub struct SeedPickerProps {
     /// Original PubMed ESearch order, when selecting seeds from a keyword query.
     #[prop_or_default]
     pub ordered_pmids: Vec<String>,
-    /// Optional hex-encoded SHA-256 hash of an exclusion corpus to pre-filter results.
+    /// Hex-encoded SHA-256 hashes of exclusion corpora to pre-filter results.
     #[prop_or_default]
-    pub exclusion_hash: Option<String>,
+    pub exclusion_hashes: Vec<String>,
     /// Whether the bibliography corpus itself should be added to the BibliZap denylist.
     /// `true` for systematic reviews (already-read papers), `false` for PubMed keyword searches.
     #[prop_or(true)]
@@ -93,7 +93,7 @@ pub fn SeedPicker(props: &SeedPickerProps) -> Html {
                 <SeedSelectionLoaded
                     {articles}
                     bibliography_hash={props.bibliography_hash.clone()}
-                    exclusion_hash={props.exclusion_hash.clone()}
+                    exclusion_hashes={props.exclusion_hashes.clone()}
                     use_bibliography_as_denylist={props.use_bibliography_as_denylist}
                 />
             }
@@ -110,9 +110,12 @@ pub fn SeedSelectionPage() -> Html {
         .as_ref()
         .map(|q| q.bibliography.clone())
         .unwrap_or_default();
-    let exclusion_hash = query.and_then(|q| q.denylist);
+    let exclusion_hashes: Vec<String> = query
+        .and_then(|q| q.denylists)
+        .map(|hashes| hashes.split_whitespace().map(str::to_owned).collect())
+        .unwrap_or_default();
 
-    html! { <SeedPicker {bibliography_hash} {exclusion_hash} /> }
+    html! { <SeedPicker {bibliography_hash} {exclusion_hashes} /> }
 }
 
 #[derive(Clone, PartialEq, Properties)]
@@ -135,7 +138,7 @@ struct SeedSelectionLoadedProps {
     articles: Vec<Article>,
     bibliography_hash: String,
     #[prop_or_default]
-    exclusion_hash: Option<String>,
+    exclusion_hashes: Vec<String>,
     #[prop_or(true)]
     use_bibliography_as_denylist: bool,
 }
@@ -157,20 +160,17 @@ fn SeedSelectionLoaded(props: &SeedSelectionLoadedProps) -> Html {
     let on_run = {
         let selected = selected.clone();
         let bibliography_hash = props.bibliography_hash.clone();
-        let exclusion_hash = props.exclusion_hash.clone();
+        let exclusion_hashes = props.exclusion_hashes.clone();
         let use_bibliography_as_denylist = props.use_bibliography_as_denylist;
         Callback::from(move |_: MouseEvent| {
             let ids_str = (*selected).iter().cloned().collect::<Vec<_>>().join(" ");
             if ids_str.is_empty() {
                 return;
             }
-            let denylist_hashes: Vec<String> = [
-                use_bibliography_as_denylist.then(|| bibliography_hash.clone()),
-                exclusion_hash.clone(),
-            ]
-            .into_iter()
-            .flatten()
-            .collect();
+            let mut denylist_hashes = exclusion_hashes.clone();
+            if use_bibliography_as_denylist {
+                denylist_hashes.insert(0, bibliography_hash.clone());
+            }
             let _ = navigator.push_with_query(
                 &Route::BibliZapResults,
                 &BibliZapResultsQuery {

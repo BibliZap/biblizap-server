@@ -144,9 +144,10 @@ pub enum Route {
 pub struct SeedSelectionQuery {
     /// Hex-encoded SHA-256 hash of the uploaded bibliography corpus.
     pub bibliography: String,
-    /// Hex-encoded SHA-256 hash of the optional exclusion corpus.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub denylist: Option<String>,
+    /// Space-separated hashes of the optional exclusion corpora.
+    /// Accept old links using the singular `denylist` parameter.
+    #[serde(default, alias = "denylist", skip_serializing_if = "Option::is_none")]
+    pub denylists: Option<String>,
 }
 
 /// Enum representing the direction of the snowball search.
