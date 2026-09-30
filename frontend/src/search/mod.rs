@@ -439,9 +439,9 @@ fn SearchAdvancedPanel(props: &SearchAdvancedPanelProps) -> Html {
     let on_add = {
         let advanced_params = advanced_params.clone();
         let on_denylists_change = props.on_denylists_change.clone();
-        Callback::from(move |hash: [u8; 32]| {
+        Callback::from(move |hashes: Vec<[u8; 32]>| {
             let mut new_denylists = (*advanced_params).denylists.clone();
-            new_denylists.push(hash);
+            new_denylists.extend(hashes);
             let hash_str = new_denylists
                 .iter()
                 .map(hex::encode)

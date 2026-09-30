@@ -1713,6 +1713,7 @@ version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "544a15ff6a3d5976bebc97380c8471ae14283bc71f4bb198d6c8cae64f411ab7"
 dependencies = [
+ "futures-channel",
  "gloo-events 0.3.0",
  "js-sys",
  "wasm-bindgen",

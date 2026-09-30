@@ -34,7 +34,7 @@ gloo-utils = "0.3.0"
 csv = "1.4.0"
 paste = "1.0.15"
 inflections = "1.1.1"
-gloo-file = "0.4.0"
+gloo-file = { version = "0.4.0", features = ["futures"] }
 chrono = "0.4.45"
 rust_xlsxwriter = { version = "0.95.0", features = ["wasm", "serde"] }
 url = "2.5.8"

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use gloo_file::{callbacks::read_as_text, File};
+use gloo_file::{futures::read_as_text, FileList};
 use wasm_bindgen_futures::spawn_local;
 use web_sys::HtmlInputElement;
 use yew::prelude::*;
@@ -76,8 +76,8 @@ pub async fn download_denylist(hash: [u8; 32]) -> Result<Vec<String>, DenylistEr
 pub struct DenylistProps {
     /// Current list of corpus hashes, one per chip.
     pub hashes: Vec<[u8; 32]>,
-    /// Called when a new file is uploaded; parent should append the hash.
-    pub on_add: Callback<[u8; 32]>,
+    /// Called once with all successfully uploaded files; parent appends their hashes.
+    pub on_add: Callback<Vec<[u8; 32]>>,
     /// Called with the chip index when the user clicks ✕.
     pub on_remove: Callback<usize>,
 }
@@ -88,7 +88,6 @@ pub fn Denylist(props: &DenylistProps) -> Html {
     let count_cache: UseStateHandle<HashMap<[u8; 32], usize>> = use_state(HashMap::new);
     let uploading = use_state(|| false);
     let upload_error = use_state(|| None::<String>);
-    let reader_task = use_mut_ref(|| None);
 
     // For any hash not yet in the cache, download it and store its count.
     use_effect_with(props.hashes.clone(), {
@@ -116,45 +115,65 @@ pub fn Denylist(props: &DenylistProps) -> Html {
 
     let on_file_change = {
         let uploading = uploading.clone();
-        let reader_task = reader_task.clone();
         let on_add = props.on_add.clone();
         let count_cache = count_cache.clone();
         let upload_error = upload_error.clone();
         Callback::from(move |e: Event| {
             let input: HtmlInputElement = e.target_unchecked_into();
-            let Some(file) = input.files().and_then(|f| f.get(0)) else {
+            let Some(files) = input.files() else {
                 return;
             };
-            let file = File::from(file);
+            let files = FileList::from(files);
+            if files.is_empty() {
+                return;
+            }
             upload_error.set(None);
             uploading.set(true);
             let uploading = uploading.clone();
             let on_add = on_add.clone();
             let count_cache = count_cache.clone();
             let upload_error = upload_error.clone();
-            let task = read_as_text(&file, move |result| {
-                let Ok(content) = result else {
-                    upload_error.set(Some("Failed to read the file.".to_string()));
-                    uploading.set(false);
-                    return;
-                };
-                let dois = extract_dois(&content).unwrap_or_default();
-                let count = dois.len();
-                spawn_local(async move {
-                    match upload_denylist_to_backend(dois).await {
-                        Ok(hash) => {
-                            // Pre-populate cache so the chip shows the count immediately.
-                            let mut new_cache = (*count_cache).clone();
-                            new_cache.insert(hash, count);
-                            count_cache.set(new_cache);
-                            on_add.emit(hash);
+            spawn_local(async move {
+                let mut uploaded = Vec::new();
+                let mut errors = Vec::new();
+                for file in files.iter() {
+                    let filename = file.name();
+                    let content = match read_as_text(file).await {
+                        Ok(content) => content,
+                        Err(_) => {
+                            errors.push(format!("{filename}: failed to read file."));
+                            continue;
                         }
-                        Err(error) => upload_error.set(Some(error.to_string())),
+                    };
+                    let Some(dois) = extract_dois(&content).filter(|dois| !dois.is_empty()) else {
+                        errors.push(format!("{filename}: no DOIs found."));
+                        continue;
+                    };
+                    let count = dois.len();
+                    match upload_denylist_to_backend(dois).await {
+                        Ok(hash) => uploaded.push((hash, count)),
+                        Err(error) => errors.push(format!("{filename}: {error}")),
                     }
-                    uploading.set(false);
-                });
+                }
+                if !uploaded.is_empty() {
+                    // Update the parent once so a multi-file selection cannot lose
+                    // hashes to stale state between individual on_add callbacks.
+                    let mut new_cache = (*count_cache).clone();
+                    let hashes = uploaded
+                        .into_iter()
+                        .map(|(hash, count)| {
+                            new_cache.insert(hash, count);
+                            hash
+                        })
+                        .collect();
+                    count_cache.set(new_cache);
+                    on_add.emit(hashes);
+                }
+                if !errors.is_empty() {
+                    upload_error.set(Some(errors.join(" ")));
+                }
+                uploading.set(false);
             });
-            *reader_task.borrow_mut() = Some(task);
         })
     };
 
@@ -219,7 +238,7 @@ fn DenylistUploadButton(
         <label class="btn btn-outline-secondary btn-sm mb-0">
             <i class="bi bi-upload me-1" />
             {"Add articles to exclude from results"}
-            <input type="file" accept=".ris,.nbib,.bzd" hidden=true onchange={on_file_change} />
+            <input type="file" accept=".ris,.nbib,.bzd" multiple=true hidden=true onchange={on_file_change} />
         </label>
     }
 }
