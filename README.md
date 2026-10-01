@@ -8,6 +8,9 @@ Biblizap is a tool designed to help researchers find relevant academic papers by
 
 This repository contains the backend server (built with Rust and Actix-web) and the frontend web application (built with Rust and Yew) that provides a user interface for the snowball search functionality.
 
+The [browser extension](extension/README.md) shares one source across Firefox and
+Chrome. Run `./extension/package.sh` to build both extension packages.
+
 ## Published evaluation and reporting
 
 Bentegeac R, Le Guellec B, Leblanc V, et al. BibliZap: An Exploratory Evaluation of an Automated Multi-Level Citation Searching Tool for Systematic and Rapid Reviews. *Research Synthesis Methods*. 2026;17(4):816–829. [https://doi.org/10.1017/rsm.2026.10079](https://doi.org/10.1017/rsm.2026.10079).

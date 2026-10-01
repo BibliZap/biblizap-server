@@ -1,9 +1,8 @@
 {
-  "manifest_version": 2,
+  "manifest_version": 3,
   "name": "BibliZap",
   "version": "1.0.3",
   "description": "Adds a BibliZap icon beside DOIs to search their citations and references in a new tab.",
-  "web_accessible_resources": ["BBZ.png"],
   "icons": {
     "48": "BBZ.png"
   },

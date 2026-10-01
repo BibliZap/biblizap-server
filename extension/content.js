@@ -1,4 +1,4 @@
-// Fonction pour créer un élément de lien avec une icône
+// Shared Firefox and Chrome content script.
 function createLinkWithIcon(doi) {
   const link = document.createElement('a');
   link.href = `https://biblizap.org/biblizap-results?ids=${encodeURIComponent(doi)}`;
