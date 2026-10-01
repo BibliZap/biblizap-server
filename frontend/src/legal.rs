@@ -55,8 +55,8 @@ const METHODS_REPORTING_TEMPLATE: &str = concat!(
     "(n = [X] seed references; identifiers provided in Supplementary Appendix [X]). ",
     "The search was performed to a depth of [one / two] citation levels in [both directions / citations only / references only]. ",
     "BibliZap ranked records by citation-path score, using ascending Lens ID as a deterministic tie-breaker. ",
-    "A RIS file of records identified through the primary database search was uploaded as an exclusion list; records with matching DOIs were hidden from the displayed results after ranking. ",
-    "The output limit was set to the top [100 / 500 / 1000 / all] ranked records before exclusion; [X] displayed records were screened by title and abstract."
+    "A RIS file of records identified through the primary database search was uploaded as an exclusion list; records with matching DOIs were removed from the output without changing their citation-path scores. ",
+    "The output limit was set to the top [100 / 500 / 1000 / all] non-excluded ranked records; [X] records were screened by title and abstract."
 );
 
 const RESULTS_REPORTING_TEMPLATE: &str = concat!(
@@ -147,7 +147,7 @@ pub fn how_it_works() -> Html {
                     {"For reproducibility, report the search date; seed identifiers (up to 100 in the web app, ideally listed in a supplement) and the rationale for any sampled seeds; Depth (one or two levels) and Search direction (Both, Citations, or References); any DOI-based exclusion file; the Number of results setting (100, 500, 1000, or All); and the numbers displayed, screened, assessed at full text, and included."}
                 </p>
                 <p class="alert alert-info">
-                    {"BibliZap ranks and applies the result limit before DOI-based exclusions are hidden from the displayed results. An uploaded RIS exclusion file is read for DOIs, so records without a matching DOI are not excluded. A top-500 limit can therefore display fewer than 500 records after exclusion."}
+                    {"Exclusion lists do not change citation searching or scores. BibliZap removes records with matching DOIs before applying the Number of results limit, filling from lower-ranked records when needed. Records without a matching DOI are not excluded."}
                 </p>
                 <p>
                     {"The bracketed alternatives and values below are examples to replace with what you actually used. Adapt or delete sentences about options you did not use (including exclusion files), and adjust the PRISMA flow-diagram sentence to your own diagram."}

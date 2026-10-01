@@ -1,14 +1,12 @@
+use std::cell::Cell;
 use std::collections::HashSet;
 use std::ops::Deref;
+use std::rc::Rc;
 
-use wasm_bindgen_futures::spawn_local;
 use yew::prelude::*;
 use yew_router::prelude::*;
 
-use crate::{
-    common::{OutputMaxSize, SearchFor},
-    search::denylist::{decode_denylist_hash, download_denylist},
-};
+use crate::common::{OutputMaxSize, SearchFor};
 
 pub mod article;
 pub use article::Article;
@@ -42,7 +40,6 @@ pub fn Spinner() -> Html {
 #[derive(Clone, PartialEq, Properties)]
 pub struct ResultsProps {
     articles: Vec<Article>,
-    denylist: Option<Vec<String>>,
     on_rerun_snowball: Callback<Vec<String>>,
     #[prop_or_default]
     seed_ids: HashSet<String>,
@@ -78,20 +75,10 @@ pub fn Results(props: &ResultsProps) -> Html {
         })
     };
 
-    let denylist_set: Option<HashSet<String>> =
-        props.denylist.as_ref().map(|v| v.iter().cloned().collect());
-
-    gloo_console::log!(format!("Raw denylist dump : {:?}", props.denylist));
-
-    // Here we apply the denylist filtering on the frontend, but we could also implement it as a backend filter in the future.
     let mut articles_to_display: Vec<Article> = props
         .articles
         .iter()
         .filter(|a| a.matches_global(&global_filter))
-        .filter(|a| match &denylist_set {
-            None => true,
-            Some(set) => !a.doi.as_ref().map(|d| set.contains(d)).unwrap_or(false),
-        })
         .cloned()
         .collect();
 
@@ -231,6 +218,7 @@ pub async fn run_snowball_with_ids(
     depth: Option<u8>,
     output_max_size: Option<&OutputMaxSize>,
     search_for: Option<&SearchFor>,
+    exclude_corpus_hashes: &[String],
 ) -> Result<Vec<Article>, Error> {
     use gloo_utils::document;
     let url = document().document_uri();
@@ -249,7 +237,8 @@ pub async fn run_snowball_with_ids(
         "output_max_size": output_max_size.unwrap_or(&OutputMaxSize::Limit(100)),
         "depth": depth.unwrap_or(2),
         "input_id_list": ids,
-        "search_for": search_for.unwrap_or(&SearchFor::Both)
+        "search_for": search_for.unwrap_or(&SearchFor::Both),
+        "exclude_corpus_hashes": exclude_corpus_hashes
     });
 
     let response = gloo_net::http::Request::post(api_url.as_str())
@@ -334,69 +323,44 @@ pub fn BibliZapResults() -> Html {
         let depth = query.depth;
         let output_max_size = query.output_max_size.clone();
         let search_for = query.search_for.clone();
+        let exclude_corpus_hashes: Vec<String> = query
+            .denylists
+            .as_deref()
+            .map(|hashes| hashes.split_whitespace().map(str::to_owned).collect())
+            .unwrap_or_default();
         // Depend on the full query string so re-navigating with different params re-fetches.
         let query_key = format!(
-            "{} {:?} {:?} {:?}",
+            "{} {:?} {:?} {:?} {:?}",
             ids.join(" "),
             depth,
             output_max_size,
-            search_for
+            search_for,
+            exclude_corpus_hashes
         );
         use_effect_with(query_key, move |_| {
             fetch_status.set(FetchStatus::Loading);
+            let active = Rc::new(Cell::new(true));
+            let request_active = active.clone();
             wasm_bindgen_futures::spawn_local(async move {
                 let result = run_snowball_with_ids(
                     &ids,
                     depth,
                     output_max_size.as_ref(),
                     search_for.as_ref(),
+                    &exclude_corpus_hashes,
                 )
                 .await;
+                if !request_active.get() {
+                    return;
+                }
                 match result {
                     Ok(articles) => fetch_status.set(FetchStatus::Success(articles)),
                     Err(e) => fetch_status.set(FetchStatus::Error(e)),
                 }
             });
-            || ()
+            move || active.set(false)
         });
     }
-    let denylist = use_state(|| Option::<Vec<String>>::None);
-    {
-        let denylist_status = denylist.clone();
-        use_effect_with(query.denylists.clone(), move |denylists_str| {
-            match denylists_str.as_deref() {
-                None | Some("") => denylist_status.set(None),
-                Some(s) => {
-                    let hashes: Vec<[u8; 32]> = s
-                        .split_whitespace()
-                        .filter_map(|h| decode_denylist_hash(h).ok())
-                        .collect();
-                    if hashes.is_empty() {
-                        denylist_status.set(None);
-                    } else {
-                        let denylist_status = denylist_status.clone();
-                        spawn_local(async move {
-                            let mut merged = Vec::new();
-                            for hash in hashes {
-                                if let Ok(dois) = download_denylist(hash).await {
-                                    merged.extend(dois);
-                                }
-                            }
-                            merged.sort_unstable();
-                            merged.dedup();
-                            denylist_status.set(if merged.is_empty() {
-                                None
-                            } else {
-                                Some(merged)
-                            });
-                        });
-                    }
-                }
-            }
-            || ()
-        });
-    }
-
     // Preserve current page's expert params when re-running on a selection.
     let on_rerun_snowball = {
         let navigator = navigator.clone();
@@ -458,7 +422,6 @@ pub fn BibliZapResults() -> Html {
                     html! {
                         <Results
                             articles={articles.clone()}
-                            denylist={(*denylist).clone()}
                             on_rerun_snowball={on_rerun_snowball}
                             {seed_ids}
                         />

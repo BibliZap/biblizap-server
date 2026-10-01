@@ -3,6 +3,7 @@
 //! It interacts with APIs like Lens.org and PubMed to retrieve article data
 //! and expand the network by finding references and citations.
 use lens::lensid;
+use std::collections::HashSet;
 
 pub mod common;
 pub mod lens;
@@ -45,6 +46,21 @@ fn compare_ranked_articles(
         .score
         .cmp(&article_a.score)
         .then_with(|| id_a.cmp(id_b))
+}
+
+fn is_excluded_by_doi(
+    article: &lens::article::ArticleWithData,
+    excluded_dois: &HashSet<String>,
+) -> bool {
+    article
+        .article_data
+        .external_ids
+        .as_ref()
+        .is_some_and(|ids| {
+            ids.doi
+                .iter()
+                .any(|doi| excluded_dois.contains(&doi.trim().to_lowercase()))
+        })
 }
 
 impl From<lens::article::Article> for Article {
@@ -145,6 +161,34 @@ pub async fn snowball<S>(
 where
     S: AsRef<str>,
 {
+    snowball_with_exclusions(
+        id_list,
+        max_depth,
+        output_max_size,
+        search_for,
+        api_key,
+        client,
+        cache,
+        &HashSet::new(),
+    )
+    .await
+}
+
+/// Runs the same citation search, but applies DOI exclusions before the output
+/// limit. Exclusions do not affect citation traversal or scores.
+pub async fn snowball_with_exclusions<S>(
+    id_list: &[S],
+    max_depth: u8,
+    output_max_size: usize,
+    search_for: &SearchFor,
+    api_key: &str,
+    client: Option<&reqwest::Client>,
+    cache: Option<&dyn CacheBackend>,
+    excluded_dois: &HashSet<String>,
+) -> Result<Vec<Article>, Error>
+where
+    S: AsRef<str>,
+{
     // Create a client if none provided
     let client_ref = match client {
         Some(c) => c,
@@ -166,28 +210,65 @@ where
     ranked_ids.sort_by(|(id_a, score_a), (id_b, score_b)| {
         score_b.cmp(score_a).then_with(|| id_a.cmp(id_b))
     });
-    // Keep the existing completion budget. Lens ID makes score ties at the
-    // cutoff deterministic without needing article metadata.
-    let selected_id: Vec<LensId> = ranked_ids
-        .into_iter()
-        .take(output_max_size)
-        .map(|(id, _)| id.clone())
-        .collect();
-
-    let lens_articles =
-        lens::complete_articles(&selected_id, api_key, Some(client_ref), cache).await?;
-
-    let mut articles_kv = lens_articles
-        .into_iter()
-        .map(|lens_article| (lens_article.lens_id.to_owned(), lens_article.into()))
-        .collect::<Vec<(lensid::LensId, Article)>>();
-
-    for (k, v) in articles_kv.iter_mut() {
-        v.score = score_hashmap.get(k).map(|x| *x as i32);
+    let mut articles_kv = Vec::<(lensid::LensId, Article)>::new();
+    if excluded_dois.is_empty() || output_max_size >= ranked_ids.len() {
+        // Keep a single completion call without exclusions, or when the limit
+        // covers the whole graph. complete_articles chunks requests itself.
+        let selected_id: Vec<LensId> = ranked_ids
+            .iter()
+            .take(output_max_size)
+            .map(|(id, _)| (*id).clone())
+            .collect();
+        let completed =
+            lens::complete_articles(&selected_id, api_key, Some(client_ref), cache).await?;
+        for lens_article in completed {
+            if is_excluded_by_doi(&lens_article, excluded_dois) {
+                continue;
+            }
+            let id = lens_article.lens_id.clone();
+            let mut article = Article::from(lens_article);
+            article.score = score_hashmap.get(&id).map(|score| *score as i32);
+            articles_kv.push((id, article));
+        }
+    } else {
+        // DOI metadata is not available in the citation graph. Complete ranked
+        // candidates in batches until N non-excluded articles have been found.
+        let mut next = 0;
+        let mut refill_batch_size = output_max_size.min(1000).max(1);
+        while next < ranked_ids.len() && articles_kv.len() < output_max_size {
+            let needed = output_max_size - articles_kv.len();
+            let count = needed.max(refill_batch_size).min(1000);
+            let end = next.saturating_add(count).min(ranked_ids.len());
+            let ids: Vec<LensId> = ranked_ids[next..end]
+                .iter()
+                .map(|(id, _)| (*id).clone())
+                .collect();
+            next = end;
+            let completed = lens::complete_articles(&ids, api_key, Some(client_ref), cache).await?;
+            let before = articles_kv.len();
+            for lens_article in completed {
+                if is_excluded_by_doi(&lens_article, excluded_dois) {
+                    continue;
+                }
+                let id = lens_article.lens_id.clone();
+                let mut article = Article::from(lens_article);
+                article.score = score_hashmap.get(&id).map(|score| *score as i32);
+                articles_kv.push((id, article));
+            }
+            refill_batch_size = if articles_kv.len() == before {
+                refill_batch_size.saturating_mul(2).min(1000)
+            } else {
+                output_max_size
+                    .saturating_sub(articles_kv.len())
+                    .min(1000)
+                    .max(1)
+            };
+        }
     }
 
     articles_kv.retain(|(_, article)| article.score.is_some());
     articles_kv.sort_by(compare_ranked_articles);
+    articles_kv.truncate(output_max_size);
 
     Ok(articles_kv
         .into_iter()
@@ -256,6 +337,33 @@ mod tests {
                 LensId::from(4)
             ]
         );
+    }
+
+    #[test]
+    fn doi_exclusions_match_any_identifier_case_insensitively() {
+        let article = lens::article::ArticleWithData {
+            lens_id: LensId::from(1),
+            article_data: lens::article::ArticleData {
+                title: None,
+                summary: None,
+                scholarly_citations_count: None,
+                external_ids: Some(lens::article::ExternalIds {
+                    doi: vec!["10.1234/other".into(), " 10.1234/EXCLUDED ".into()],
+                    pmid: vec!["12345".into()],
+                }),
+                authors: None,
+                source: None,
+                year_published: None,
+            },
+        };
+        assert!(is_excluded_by_doi(
+            &article,
+            &HashSet::from(["10.1234/excluded".into()])
+        ));
+        assert!(!is_excluded_by_doi(
+            &article,
+            &HashSet::from(["10.1234/unrelated".into()])
+        ));
     }
 
     /// Helper function to get API key from environment

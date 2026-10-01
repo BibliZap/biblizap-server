@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
 
 use actix_web::{HttpResponse, Responder, web};
 
@@ -80,6 +80,40 @@ pub enum CorpusError {
     DatabaseError(#[from] sqlx::Error),
     #[error("Compression error: {0}")]
     CompressionError(#[from] std::io::Error),
+    #[error("Invalid exclusion corpus hash")]
+    InvalidExclusionHash,
+    #[error("Exclusion corpus not found")]
+    ExclusionCorpusNotFound,
+}
+
+/// Loads the DOI identifiers stored in exclusion corpora. The search result
+/// filter is DOI-based, matching the identifiers extracted from RIS/NBIB files.
+pub async fn load_excluded_dois(
+    pool: &sqlx::PgPool,
+    hashes: &[String],
+) -> Result<HashSet<String>, CorpusError> {
+    let mut excluded = HashSet::new();
+    for hash_hex in hashes {
+        let hash: [u8; 32] = hex::decode(hash_hex)
+            .ok()
+            .and_then(|bytes| bytes.try_into().ok())
+            .ok_or(CorpusError::InvalidExclusionHash)?;
+        let corpus = match Corpus::load_from_database(pool, &hash).await {
+            Ok(corpus) => corpus,
+            Err(CorpusError::DatabaseError(sqlx::Error::RowNotFound)) => {
+                return Err(CorpusError::ExclusionCorpusNotFound);
+            }
+            Err(error) => return Err(error),
+        };
+        excluded.extend(
+            corpus
+                .ids
+                .into_iter()
+                .map(|id| id.0)
+                .filter(|id| crate::common::is_valid_doi(id)),
+        );
+    }
+    Ok(excluded)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]

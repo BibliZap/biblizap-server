@@ -192,14 +192,21 @@ It expects a JSON body with the following structure:
 
 ```json
 {
-  "output_max_size": 100,
+  "output_max_size": "100",
   "depth": 2,
   "input_id_list": ["10.1016/j.cell.2020.01.040", "32109876"],
-  "search_for": "Both" // or "References", "Citations"
+  "search_for": "Both",
+  "exclude_corpus_hashes": ["<64-character corpus hash>"]
 }
 ```
 
-The response is a JSON array of article objects.
+`search_for` can also be `"References"` or `"Citations"`. The optional
+`exclude_corpus_hashes` array contains hashes returned by
+`POST /api/corpus/upload`; omit it or use `[]` when no exclusion lists are
+needed. Use `"All"` for an unlimited `output_max_size`. The server
+removes records whose DOIs match those lists before applying `output_max_size`.
+Exclusions do not affect citation traversal or scores. The response is a JSON
+array of article objects.
 
 ### Health check
 

@@ -1,4 +1,5 @@
 use crate::common::*;
+use crate::corpus;
 use crate::tracking;
 
 use super::{AppConfig, Error};
@@ -15,6 +16,8 @@ struct SnowballParameters {
     depth: u8,
     input_id_list: Vec<String>,
     search_for: SearchFor,
+    #[serde(default)]
+    exclude_corpus_hashes: Vec<String>,
 }
 
 /// Handles the core logic of performing the snowball search using biblizap-rs.
@@ -24,6 +27,7 @@ async fn handle_request(
     req_body: &str,
     lens_api_key: &str,
     cache_backend: &PostgresBackend,
+    database_pool: &sqlx::PgPool,
 ) -> Result<String, Error> {
     let parameters = serde_json::from_str::<SnowballParameters>(req_body)?;
     log::info!("Received request: {:?}", parameters);
@@ -44,7 +48,9 @@ async fn handle_request(
             return Err(Error::InvalidIdFormat(id.clone()));
         }
     }
-    let snowball = biblizap_rs::snowball(
+    let excluded_dois =
+        corpus::load_excluded_dois(database_pool, &parameters.exclude_corpus_hashes).await?;
+    let snowball = biblizap_rs::snowball_with_exclusions(
         &parameters.input_id_list,
         parameters.depth.clamp(1, 2),
         parameters
@@ -56,6 +62,7 @@ async fn handle_request(
         lens_api_key,
         None,
         Some(cache_backend),
+        &excluded_dois,
     )
     .await?;
 
@@ -75,8 +82,13 @@ async fn handle_request(
 pub async fn snowball_request(req_body: String, config: web::Data<AppConfig>) -> impl Responder {
     let request_started_ms = epoch_ms();
     let request_inputs = serde_json::from_str::<serde_json::Value>(&req_body).ok();
-    let snowball: Result<String, Error> =
-        handle_request(&req_body, &config.lens_api_key, &config.cache_backend).await;
+    let snowball: Result<String, Error> = handle_request(
+        &req_body,
+        &config.lens_api_key,
+        &config.cache_backend,
+        &config.database_pool,
+    )
+    .await;
     let request_completed_ms = epoch_ms();
 
     let pool = config.database_pool.clone();
@@ -110,11 +122,31 @@ pub async fn snowball_request(req_body: String, config: web::Data<AppConfig>) ->
 
             // Return 400 Bad Request for validation errors, 500 for others
             match error {
-                Error::InvalidIdFormat(_) | Error::TooManyIds(_) | Error::NoValidIds => {
+                Error::InvalidIdFormat(_)
+                | Error::TooManyIds(_)
+                | Error::NoValidIds
+                | Error::CorpusError(corpus::CorpusError::InvalidExclusionHash)
+                | Error::CorpusError(corpus::CorpusError::ExclusionCorpusNotFound) => {
                     HttpResponse::BadRequest().body(format!("{error}"))
                 }
                 _ => HttpResponse::InternalServerError().body(format!("{error}")),
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SnowballParameters;
+
+    #[test]
+    fn exclusion_hashes_are_optional_in_api_requests() {
+        let base = r#"{"output_max_size":"100","depth":2,"input_id_list":["10.1234/example"],"search_for":"Both"}"#;
+        let request: SnowballParameters = serde_json::from_str(base).unwrap();
+        assert!(request.exclude_corpus_hashes.is_empty());
+
+        let with_hashes = r#"{"output_max_size":"100","depth":2,"input_id_list":["10.1234/example"],"search_for":"Both","exclude_corpus_hashes":["abc","def"]}"#;
+        let request: SnowballParameters = serde_json::from_str(with_hashes).unwrap();
+        assert_eq!(request.exclude_corpus_hashes, ["abc", "def"]);
     }
 }
