@@ -4,7 +4,7 @@ A server and frontend application for performing snowball searches on academic l
 
 ## Project Description
 
-Biblizap is a tool designed to help researchers find relevant academic papers by performing "snowball" searches. Starting from a list of initial papers (identified by PMIDs, DOIs, or Lens IDs), it recursively explores their references (downward citations) and the papers that cite them (upward citations) up to a specified depth. The results are then scored based on how many times they appear in the search path.
+Biblizap is a tool designed to help researchers find relevant academic papers by performing "snowball" searches. Starting from seed papers identified by DOIs or PMIDs, it recursively explores their references (downward citations) and the papers that cite them (upward citations) up to a specified depth. It ranks candidate records by descending citation-path score, with ascending Lens ID as a deterministic tie-breaker.
 
 This repository contains the backend server (built with Rust and Actix-web) and the frontend web application (built with Rust and Yew) that provides a user interface for the snowball search functionality.
 
@@ -203,10 +203,14 @@ It expects a JSON body with the following structure:
 `search_for` can also be `"References"` or `"Citations"`. The optional
 `exclude_corpus_hashes` array contains hashes returned by
 `POST /api/corpus/upload`; omit it or use `[]` when no exclusion lists are
-needed. Use `"All"` for an unlimited `output_max_size`. The server
-removes records whose DOIs match those lists before applying `output_max_size`.
-Exclusions do not affect citation traversal or scores. The response is a JSON
-array of article objects.
+needed. Use `"All"` for an unlimited `output_max_size`. The server ranks
+candidate records by descending citation-path score, with ascending Lens ID
+breaking ties. It then removes records whose DOIs match the exclusion lists
+before applying `output_max_size`, filling from lower-ranked candidates when
+needed. Exclusions do not change citation traversal or scores; records without
+a matching DOI remain eligible. Fewer than the requested number may be returned
+if no more candidates are available. The response is a JSON array of article
+objects.
 
 ### Health check
 

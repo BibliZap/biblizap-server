@@ -21,6 +21,10 @@ pub fn legal_information() -> Html {
                 {"While we strive to keep the information up to date and accurate, we make no representations or warranties of any kind, express or implied, about the completeness, accuracy, reliability, suitability, or availability with respect to the website or the information, products, services, or related graphics contained on the website for any purpose."}<br/>
                 {"Any reliance you place on such information is therefore strictly at your own risk."}
             </p>
+            <p class="p-3">
+                {"Search results are ranked by descending citation-path score, with ascending Lens ID breaking ties. Uploaded exclusion lists remove only records with matching DOIs before the result limit is applied; they do not change citation traversal or scores. Records without a matching DOI remain eligible, and fewer than the selected number may be returned if no more candidates are available. "}
+                <a href="/how-it-works#how-to-report-a-biblizap-search">{"See how to report a BibliZap search."}</a>
+            </p>
             <h3>{"Privacy Policy"}</h3>
             <p class="p-3">
                 {"No personal information is collected on this website."}
@@ -55,7 +59,7 @@ const METHODS_REPORTING_TEMPLATE: &str = concat!(
     "(n = [X] seed references; identifiers provided in Supplementary Appendix [X]). ",
     "The search was performed to a depth of [one / two] citation levels in [both directions / citations only / references only]. ",
     "BibliZap ranked records by citation-path score, using ascending Lens ID as a deterministic tie-breaker. ",
-    "A RIS file of records identified through the primary database search was uploaded as an exclusion list; records with matching DOIs were removed from the output without changing their citation-path scores. ",
+    "A RIS file of records identified through the primary database search was uploaded as an exclusion list; records with matching DOIs were removed from the output without changing citation traversal or scores. ",
     "The output limit was set to the top [100 / 500 / 1000 / all] non-excluded ranked records; [X] records were screened by title and abstract."
 );
 
@@ -147,7 +151,7 @@ pub fn how_it_works() -> Html {
                     {"For reproducibility, report the search date; seed identifiers (up to 100 in the web app, ideally listed in a supplement) and the rationale for any sampled seeds; Depth (one or two levels) and Search direction (Both, Citations, or References); any DOI-based exclusion file; the Number of results setting (100, 500, 1000, or All); and the numbers displayed, screened, assessed at full text, and included."}
                 </p>
                 <p class="alert alert-info">
-                    {"Exclusion lists do not change citation searching or scores. BibliZap removes records with matching DOIs before applying the Number of results limit, filling from lower-ranked records when needed. Records without a matching DOI are not excluded."}
+                    {"Exclusion lists do not change citation traversal or scores. After ranking by descending citation-path score (with ascending Lens ID breaking ties), BibliZap removes records with matching DOIs before applying the Number of results limit, filling from lower-ranked candidates when needed. Records without a matching DOI remain eligible; fewer than the selected number may be returned if no more candidates are available."}
                 </p>
                 <p>
                     {"The bracketed alternatives and values below are examples to replace with what you actually used. Adapt or delete sentences about options you did not use (including exclusion files), and adjust the PRISMA flow-diagram sentence to your own diagram."}
