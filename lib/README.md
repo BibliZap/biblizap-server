@@ -7,7 +7,9 @@ BibliZap is a free and open-source project that aims to catalog articles similar
 *   **Downward citations:** Correspond to the references (bibliography) of the articles.
 *   **Upward citations:** Correspond to the articles that cite the source article.
 
-The process involves exploring citations iteratively. At each level of exploration (e.g., references of the source, articles citing the references, etc.), the number of times each article (identified by PMID) is encountered is recorded. The final score for an article is the sum of its occurrences across all levels. For example, if an article appears once in the source's references and six times in articles citing those references, its score is 7.
+The process involves exploring citations iteratively. At each level of exploration (e.g., references of the source, articles citing the references, etc.), the number of citation paths reaching each article (identified internally by Lens ID) is recorded. The final score is the sum of these path counts across all levels. Results are ranked by descending score, with ascending Lens ID resolving ties deterministically.
+
+For a published evaluation, see Bentegeac R, Le Guellec B, Leblanc V, et al. *BibliZap: An Exploratory Evaluation of an Automated Multi-Level Citation Searching Tool for Systematic and Rapid Reviews*. Research Synthesis Methods. 2026;17(4):816–829. [https://doi.org/10.1017/rsm.2026.10079](https://doi.org/10.1017/rsm.2026.10079). For reporting guidance, see [How to report a BibliZap search](https://biblizap.org/how-it-works#how-to-report-a-biblizap-search).
 
 Data for BibliZap is provided by The Lens, a not-for-profit service from Cambia. The Lens aggregates and harmonizes bibliographic data from various sources like Crossref, PubMed, and Microsoft Academic.
 
@@ -62,4 +64,3 @@ If you built a release version and want to run the compiled executable:
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details.
-
